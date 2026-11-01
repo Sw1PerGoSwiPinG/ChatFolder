@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>留白 · Chat Fold</title><link rel="stylesheet" href="popup.css"></head>
+<body>
+  <header><div class="mark" aria-hidden="true"><span></span><span></span><span></span></div><span class="edition">CHAT FOLD / 01</span></header>
+  <main>
+    <div class="heading"><h1>留白<span>。</span></h1><span class="tag">给问题留一点空间</span></div>
+    <p class="intro">把长篇回答收起来，<br>让每一个问题，清晰可见。</p>
+    <section class="settings" aria-label="折叠设置">
+      <label class="setting"><span><strong>专注模式</strong><small>在 ChatGPT 中启用回答折叠</small></span><input id="enabled" type="checkbox" role="switch"><span class="switch" aria-hidden="true"></span></label>
+      <label class="setting"><span><strong>新回答自动收起</strong><small>需要时，点击回答按钮展开</small></span><input id="defaultCollapsed" type="checkbox" role="switch"><span class="switch" aria-hidden="true"></span></label>
+    </section>
+    <section class="conversation" aria-label="当前会话">
+      <div class="section-label">当前会话 <span id="provider">—</span></div>
+      <p id="status" role="status" aria-live="polite">正在连接页面…</p>
+      <div class="actions"><button id="collapse" disabled><span aria-hidden="true">−</span> 全部收起</button><button id="expand" disabled><span aria-hidden="true">＋</span> 全部展开</button></div>
+      <details id="diagnostics"><summary>兼容性诊断 <span id="version"></span></summary><p>仅包含页面结构计数与扩展版本，不包含聊天内容。</p><button id="diagnose" type="button">读取诊断信息</button><textarea id="diagnosticOutput" aria-label="诊断信息，可复制反馈" readonly hidden></textarea><p>刷新页面会中断正在生成的回答，请先保留未发送的草稿。</p><button id="reload" type="button">刷新页面并重连</button></details>
+    </section>
+    <p id="error" role="alert" hidden></p>
+  </main>
+  <footer><span class="dot"></span> 仅在本地运行 <span class="footer-end">少一点滚动，多一点思考 ↗</span></footer>
+  <script src="popup.js"></script>
+</body>
+</html>

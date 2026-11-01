@@ -1,0 +1,3 @@
+/* Only mark containers we own. Removing the attribute restores the host page. */
+[data-chat-fold-hidden="true"] { display: none !important; }
+[data-chat-fold-control] { display: block !important; width: 100%; box-sizing: border-box; }
