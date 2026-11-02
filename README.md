@@ -13,7 +13,7 @@
 3. 点击「加载已解压的扩展程序」，选择包含 `manifest.json` 的文件夹（本项目根目录）。
 4. 打开或刷新 [ChatGPT](https://chatgpt.com/)，建议把「留白」固定到浏览器工具栏。
 
-**不需要安装 Node.js，也不需要执行 npm 或构建。** 不要只选择 `content` 或 `popup` 子目录。安装或更新扩展后，已打开的 ChatGPT 页面需要刷新一次。
+**源码安装需先执行 `npm ci` 和 `npm run build`。** 详见 [开发说明](DEVELOPMENT.md)。 不要只选择 `content` 或 `popup` 子目录。安装或更新扩展后，已打开的 ChatGPT 页面需要刷新一次。
 
 ## 使用
 
@@ -39,7 +39,7 @@ content/engine.js             独立状态、DOM 监听、折叠控件与消息�
 content/probe.js              独立诊断脚本，不依赖折叠引擎的消息响应
 content/content.css           隐藏标记样式
 popup/                        工具栏弹窗
-tests/engine.test.cjs          DOM 集成测试
+tests/engine.test.ts          DOM 集成测试
 ```
 
 Gemini、DeepSeek **尚未实现**。添加支持时：
@@ -84,7 +84,7 @@ Chrome 实测建议：打开一个多轮会话；逐条展开；发送新问题�
 
 ```powershell
 New-Item -ItemType Directory -Force dist
-Compress-Archive -Path manifest.json,content,popup -DestinationPath dist/chat-fold-1.0.5.zip -Force
+Compress-Archive -Path manifest.json,build,content,popup -DestinationPath dist/chat-fold-1.0.5.zip -Force
 ```
 
 上架 Chrome 应用商店还需另行准备商店截图、图标和发布资料；当前交付可直接使用开发者模式加载。
@@ -144,4 +144,4 @@ Compress-Archive -Path manifest.json,content,popup -DestinationPath dist/chat-fo
 
 开发依赖已包含官方 `chrome-devtools-mcp` 与 MCP SDK。Chrome 144+ 在 `chrome://inspect/#remote-debugging` 开启远程调试后，可通过 Codex 已配置的 `chrome-devtools` MCP 服务连接；首次连接由 Chrome 提示授权。
 
-本项目还提供 `node scripts/devtools-session.mjs`，供当前会话通过 JSON 行调用同一个 MCP 服务。例如输入 `{"tool":"list_pages"}`。工具响应保存到忽略版本控制的 `artifacts/devtools-last-result.json`，不会打包到扩展中。该调试客户端只声明本项目为文件访问根目录，并关闭 MCP 使用统计。扩展运行本身仍不需要这些开发依赖。
+本项目还提供 `npm run debug:browser`，供当前会话通过 JSON 行调用同一个 MCP 服务。例如输入 `{"tool":"list_pages"}`。工具响应保存到忽略版本控制的 `artifacts/devtools-last-result.json`，不会打包到扩展中。该调试客户端只声明本项目为文件访问根目录，并关闭 MCP 使用统计。扩展运行本身仍不需要这些开发依赖。

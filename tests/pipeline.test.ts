@@ -48,7 +48,7 @@ async function pipeline(t, initiallyInjected) {
   popup.window.chrome = chrome;
   if (initiallyInjected) for (const file of manifest.content_scripts[0].js) page.window.eval(read(file));
   await new Promise(resolve => setTimeout(resolve, 10));
-  popup.window.eval(read('popup/popup.js'));
+  popup.window.eval(read('build/popup/popup.js'));
   await new Promise(resolve => setTimeout(resolve, 20));
   return { page, popup, root };
 }

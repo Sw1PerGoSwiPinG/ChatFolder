@@ -25,7 +25,7 @@ async function setup(t, html = user + answer('a'), settings = {}, trustedTypes =
       onChanged: { addListener(fn) { onChange = fn; }, removeListener(fn) { if (onChange === fn) onChange = null; } }
     }
   };
-  for (const file of ['content/dom.js', 'content/registry.js', 'content/adapters/chatgpt.js', 'content/engine.js']) {
+  for (const file of ['build/content/dom.js', 'build/content/registry.js', 'build/content/adapters/chatgpt.js', 'build/content/engine.js']) {
     window.eval(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'));
   }
   await sleep(10);
@@ -181,7 +181,7 @@ test('creates working buttons even when Trusted Types rejects HTML string inject
 test('reinjection tears down the previous engine and does not duplicate buttons', async t => {
   const app = await setup(t);
   const old = app.window.__chatFoldRuntime;
-  for (const file of ['content/dom.js', 'content/registry.js', 'content/adapters/chatgpt.js', 'content/engine.js']) {
+  for (const file of ['build/content/dom.js', 'build/content/registry.js', 'build/content/adapters/chatgpt.js', 'build/content/engine.js']) {
     app.window.eval(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'));
   }
   await sleep(10);
@@ -199,7 +199,7 @@ test('versioned status reports render failures instead of dropping the message r
   assert.equal(result.error.stage, 'render');
   assert.equal(result.error.name, 'TypeError');
   assert.doesNotMatch(JSON.stringify(result), /private text/);
-  const diagnostic = app.window.eval(fs.readFileSync(path.join(__dirname, '../content/probe.js'), 'utf8') + '\nChatFoldProbe()');
+  const diagnostic = app.window.eval(fs.readFileSync(path.join(__dirname, '../build/content/probe.js'), 'utf8') + '\nChatFoldProbe()');
   assert.equal(diagnostic.engineError.name, 'TypeError');
   assert.equal(diagnostic.structure.controls, 1);
 });
@@ -226,7 +226,7 @@ test('finds and folds answers when the top document has zero articles and three 
   chat.append(template.content);
   await sleep(110);
   assert.equal(chat.querySelectorAll('[data-chat-fold-control]').length, 2);
-  const diagnostic = app.window.eval(fs.readFileSync(path.join(__dirname, '../content/probe.js'), 'utf8') + '\nChatFoldProbe()');
+  const diagnostic = app.window.eval(fs.readFileSync(path.join(__dirname, '../build/content/probe.js'), 'utf8') + '\nChatFoldProbe()');
   assert.equal(diagnostic.structure.articles, 0);
   assert.equal(diagnostic.nested.contexts.filter(context => context.kind === 'shadow').length, 3);
   assert.equal(diagnostic.nested.contexts.find(context => context.kind === 'shadow' && context.articles).articles, 3);
@@ -277,7 +277,7 @@ test('Chrome closed-shadow API discovers closed roots without changing page atta
   assert.equal(host.shadowRoot, null);
   assert.equal(app.message({ type: 'chat-fold:v2:status' }).total, 1);
   assert.ok(root.querySelector('[data-chat-fold-control]'));
-  const diagnostic = app.window.eval(fs.readFileSync(path.join(__dirname, '../content/probe.js'), 'utf8') + '\nChatFoldProbe()');
+  const diagnostic = app.window.eval(fs.readFileSync(path.join(__dirname, '../build/content/probe.js'), 'utf8') + '\nChatFoldProbe()');
   assert.equal(diagnostic.nested.closedShadowRoots, 1);
 });
 
@@ -293,7 +293,7 @@ test('inaccessible frames are reported without throwing or requesting broad perm
   const app = await setup(t, '<iframe id="cross"></iframe>');
   Object.defineProperty(app.document.querySelector('#cross'), 'contentDocument', { get: () => null });
   assert.equal(app.message({ type: 'chat-fold:v2:status' }).error, null);
-  const diagnostic = app.window.eval(fs.readFileSync(path.join(__dirname, '../content/probe.js'), 'utf8') + '\nChatFoldProbe()');
+  const diagnostic = app.window.eval(fs.readFileSync(path.join(__dirname, '../build/content/probe.js'), 'utf8') + '\nChatFoldProbe()');
   assert.equal(diagnostic.nested.inaccessibleFrames, 1);
 });
 
@@ -312,7 +312,7 @@ test('SVG and MathML elements are never passed to the HTMLElement-only Chrome sh
   } };
   assert.equal(app.message({ type: 'chat-fold:v2:status' }).total, 1);
   assert.equal(invalidCalls, 0);
-  const result = app.window.eval(fs.readFileSync(path.join(__dirname, '../content/probe.js'), 'utf8') + '\nChatFoldProbe()');
+  const result = app.window.eval(fs.readFileSync(path.join(__dirname, '../build/content/probe.js'), 'utf8') + '\nChatFoldProbe()');
   assert.equal(result.nested.closedShadowRoots, 1);
 });
 
@@ -327,7 +327,7 @@ test('one rejected Chrome shadow lookup cannot abort detection or independent di
   const status = app.message({ type: 'chat-fold:v2:status' });
   assert.equal(status.error, null);
   assert.equal(status.total, 1);
-  const result = app.window.eval(fs.readFileSync(path.join(__dirname, '../content/probe.js'), 'utf8') + '\nChatFoldProbe()');
+  const result = app.window.eval(fs.readFileSync(path.join(__dirname, '../build/content/probe.js'), 'utf8') + '\nChatFoldProbe()');
   assert.equal(result.nested.scanErrors[0].type, 'shadow-access/TypeError');
   assert.equal(result.nested.scanErrors[0].count, 1);
   assert.doesNotMatch(JSON.stringify(result), /private conversation data/);

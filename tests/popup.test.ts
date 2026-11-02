@@ -37,13 +37,13 @@ async function setup(t, url, connected = true, options = {}) {
           extensionVersion: '1.0.5', pageVersion: ready ? options.pageVersion || '1.0.5' : null,
           legacyScript: options.legacy ?? false, structure: { controls: ready ? 3 : 0 }
         } }];
-        if (args.files.includes('content/probe.js')) return [{ result: undefined }];
+        if (args.files.includes('build/content/probe.js')) return [{ result: undefined }];
         ready = true;
         return [{ result: undefined }];
       }
     }
   };
-  dom.window.eval(fs.readFileSync(path.join(__dirname, '../popup/popup.js'), 'utf8'));
+  dom.window.eval(fs.readFileSync(path.join(__dirname, '../build/popup/popup.js'), 'utf8'));
   await new Promise(resolve => setTimeout(resolve, 10));
   return { document: dom.window.document, window: dom.window, messages, saved, injections };
 }
@@ -87,14 +87,14 @@ test('popup exposes copyable compatibility diagnostics', async t => {
 test('undefined message responses trigger safe reinjection and a new handshake', async t => {
   const app = await setup(t, 'https://chatgpt.com/', false, { emptyResponse: true });
   assert.match(app.document.getElementById('status').textContent, /3 次回答/);
-  assert.ok(app.injections.some(call => call.files?.includes('content/engine.js')));
+  assert.ok(app.injections.some(call => call.files?.includes('build/content/engine.js')));
   assert.ok(app.injections.some(call => call.files?.includes('content/content.css')));
 });
 
 test('legacy listeners never cause diagnostics to display undefined or start duplicate engines', async t => {
   const app = await setup(t, 'https://chatgpt.com/', false, { emptyResponse: true, legacy: true });
   assert.match(app.document.getElementById('status').textContent, /旧版页面脚本/);
-  assert.equal(app.injections.some(call => call.files?.includes('content/engine.js')), false);
+  assert.equal(app.injections.some(call => call.files?.includes('build/content/engine.js')), false);
   app.document.getElementById('diagnose').click();
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.equal(JSON.parse(app.document.getElementById('diagnosticOutput').value).legacyScript, true);
@@ -115,7 +115,7 @@ test('rejects a previous-version page engine even if it uses the same message pr
   const app = await setup(t, 'https://chatgpt.com/', true, { pageVersion: '1.0.2' });
   assert.match(app.document.getElementById('status').textContent, /旧版页面脚本/);
   assert.equal(app.document.getElementById('collapse').disabled, true);
-  assert.equal(app.injections.some(call => call.files?.includes('content/engine.js')), false);
+  assert.equal(app.injections.some(call => call.files?.includes('build/content/engine.js')), false);
 });
 
 test('diagnostics explicitly return a value even when injected files return undefined', async t => {

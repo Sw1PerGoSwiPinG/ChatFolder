@@ -7,18 +7,18 @@
   const MODERN_ASSISTANT = '[data-conversation-role="assistant"], [data-chatgpt-agent-turn-start]';
   const MODERN_TURN = '[data-talvt-turn-state]';
 
-  function inactive(element) {
-    for (let node = element; node; node = ChatFoldDOM.parent(node)) {
+  function inactive(element: Element): boolean {
+    for (let node: Element | null = element; node; node = ChatFoldDOM.parent(node)) {
       if (node.getAttribute('data-app-shell-active-page') === 'false') return true;
     }
     return false;
   }
 
-  function modernAnswers(root) {
-    return [...root.querySelectorAll(MODERN_TURN)].flatMap(turn => {
+  function modernAnswers(root: DOMScope): (AnswerDescriptor & { elements: Element[] })[] {
+    return [...root.querySelectorAll(MODERN_TURN)].flatMap<AnswerDescriptor & { elements: Element[] }>(turn => {
       if (inactive(turn) || !turn.querySelector(MODERN_ASSISTANT)) return [];
-      const elements = [];
-      function partition(node) {
+      const elements: Element[] = [];
+      function partition(node: Element): void {
         if (node.matches('[data-chat-fold-control], [data-chat-fold-style], script, style, template')) return;
         if (node.matches(USER)) return;
         const hasUser = Boolean(node.querySelector(USER));
@@ -35,23 +35,23 @@
     });
   }
 
-  function speaker(element) {
+  function speaker(element: Element): 'user' | 'assistant' | null {
     // ChatGPT also exposes the speaker through accessible headings, without role attributes.
     const headings = [...element.querySelectorAll('h5, h6, [role="heading"], .sr-only')];
     const labels = [element.getAttribute('aria-label'), ...headings
       .filter(node => !node.closest(BODY))
-      .map(node => node.textContent)].filter(Boolean);
+      .map(node => node.textContent)].filter((label): label is string => Boolean(label));
     if (labels.some(label => /^(?:you said|you|用户|你说|你说过|您说|你)[：:\s]*$/i.test(label.trim()))) return 'user';
     if (labels.some(label => /^(?:chatgpt(?: said| says| 说| 说过)?|assistant|助手)[：:\s]*$/i.test(label.trim()))) return 'assistant';
     return null;
   }
 
-  function containsUser(element) {
+  function containsUser(element: Element): boolean {
     return element.matches(USER) || Boolean(element.querySelector(USER)) || speaker(element) === 'user';
   }
 
-  function findInRoot(document) {
-    const candidates = new Set();
+  function findInRoot(document: DOMScope): Element[] {
+    const candidates = new Set<Element>();
     for (const message of document.querySelectorAll(ASSISTANT)) {
       if (inactive(message) || insideUser(message)) continue;
       const turn = message.closest(TURN);
@@ -69,14 +69,14 @@
       ![...candidates].some(other => other !== element && other.contains(element)));
   }
 
-  function insideUser(element) {
-    for (let node = element; node; node = ChatFoldDOM.parent(node)) {
+  function insideUser(element: Element): boolean {
+    for (let node: Element | null = element; node; node = ChatFoldDOM.parent(node)) {
       if (node.matches(USER) || (node.matches(TURN) && speaker(node) === 'user')) return true;
     }
     return false;
   }
 
-  function findAnswers(document, scopes = ChatFoldDOM.scan(document)) {
+  function findAnswers(document: Document, scopes: DOMDiscovery = ChatFoldDOM.scan(document)) {
     const modern = scopes.roots.flatMap(({ root }) => modernAnswers(root));
     const candidates = scopes.roots.flatMap(({ root }) => findInRoot(root));
     const elements = candidates.filter(element => !candidates.some(other =>
@@ -105,10 +105,10 @@
         roleCounts: Object.fromEntries(attributes.map(name => [name,
           [...document.querySelectorAll(`[${name}]`)].reduce((counts, node) => {
             const value = node.getAttribute(name);
-            const role = knownRoles.has(value) ? value : 'other';
+            const role = value && knownRoles.has(value) ? value : 'other';
             counts[role] = (counts[role] || 0) + 1;
             return counts;
-          }, {})])),
+          }, {} as Record<string, number>)])),
         markdownBlocks: document.querySelectorAll(BODY).length,
         assistantLabels: [...document.querySelectorAll(TURN)].filter(turn => speaker(turn) === 'assistant').length,
         frames: document.querySelectorAll('iframe').length,

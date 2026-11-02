@@ -1,7 +1,7 @@
 (() => {
   "use strict";
   // Adapters only discover answer containers; the engine owns UI and state.
-  const adapters = [];
+  const adapters: ProviderAdapter[] = [];
   globalThis.ChatFold = {
     defaults: { enabled: true, defaultCollapsed: true },
     register(adapter) {

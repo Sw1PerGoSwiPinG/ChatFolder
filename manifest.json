@@ -1,17 +1,33 @@
 {
   "manifest_version": 3,
   "name": "留白 · Chat Fold",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "收起 AI 的长篇回答，让问题成为对话目录。支持 ChatGPT，可逐条展开。",
-  "permissions": ["storage", "activeTab", "scripting"],
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
   "action": {
     "default_title": "留白 · Chat Fold",
     "default_popup": "popup/popup.html"
   },
-  "content_scripts": [{
-    "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
-    "js": ["content/dom.js", "content/registry.js", "content/adapters/chatgpt.js", "content/engine.js"],
-    "css": ["content/content.css"],
-    "run_at": "document_idle"
-  }]
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "build/content/dom.js",
+        "build/content/registry.js",
+        "build/content/adapters/chatgpt.js",
+        "build/content/engine.js"
+      ],
+      "css": [
+        "content/content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
 }

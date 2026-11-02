@@ -1,15 +1,22 @@
 {
   "name": "chat-fold",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "private": true,
   "description": "A local-first Chrome extension that folds ChatGPT answers",
   "scripts": {
-    "test": "node --test tests/*.test.cjs",
-    "check": "node --check content/dom.js && node --check content/registry.js && node --check content/adapters/chatgpt.js && node --check content/engine.js && node --check content/probe.js && node --check popup/popup.js"
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json",
+    "pretest": "npm run build",
+    "test": "tsx --test tests/*.test.ts",
+    "debug:browser": "tsx scripts/devtools-session.mts"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
+    "@types/chrome": "^0.3.7",
+    "@types/node": "^26.6.6",
     "chrome-devtools-mcp": "^1.12.0",
-    "jsdom": "^26.1.0"
+    "jsdom": "^26.1.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   }
 }

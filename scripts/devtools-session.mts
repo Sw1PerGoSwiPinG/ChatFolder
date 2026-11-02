@@ -11,7 +11,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 const server = fileURLToPath(new URL('../node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js', import.meta.url));
 const transport = new StdioClientTransport({ command: process.execPath,
   args: [server, '--autoConnect', '--no-usage-statistics', '--categoryExtensions'], stderr: 'pipe' });
-transport.stderr.on('data', chunk => process.stderr.write(chunk));
+transport.stderr?.on('data', chunk => process.stderr.write(chunk));
 const client = new Client({ name: 'chat-fold-debugger', version: '1.0.0' }, { capabilities: { roots: { listChanged: false } } });
 client.setRequestHandler(ListRootsRequestSchema, () => ({ roots: [{
   uri: pathToFileURL(fileURLToPath(new URL('../', import.meta.url))).href,
@@ -35,6 +35,6 @@ for await (const line of input) {
     await mkdir(directory, { recursive: true });
     await writeFile(new URL('devtools-last-result.json', directory), JSON.stringify(result, null, 2));
     console.log(JSON.stringify({ completed: request.tool, isError: result.isError || false }));
-  } catch (error) { console.log(JSON.stringify({ error: error.message })); }
+  } catch (error) { console.log(JSON.stringify({ error: error instanceof Error ? error.message : String(error) })); }
 }
 await client.close();

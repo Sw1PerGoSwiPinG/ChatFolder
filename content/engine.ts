@@ -1,19 +1,20 @@
 (() => {
   "use strict";
   globalThis.__chatFoldRuntime?.destroy();
-  const adapter = ChatFold.resolve(location);
-  if (!adapter) return;
+  const resolvedAdapter = ChatFold.resolve(location);
+  if (!resolvedAdapter) return;
+  const adapter: ProviderAdapter = resolvedAdapter;
 
   let settings = { ...ChatFold.defaults };
   let route = location.pathname;
-  let timer;
+  let timer: number | undefined;
   let sequence = 0;
-  const records = new Map();
-  const choices = new Map();
+  const records = new Map<Element, AnswerRecord>();
+  const choices = new Map<string, boolean>();
   const CONTROLS = "[data-chat-fold-control]";
   const DOM = ChatFoldDOM;
-  const scopes = new Map();
-  const scopeIds = new WeakMap();
+  const scopes = new Map<DOMScope, HTMLStyleElement>();
+  const scopeIds = new WeakMap<Node, number>();
   let nextScopeId = 0;
   const observationOptions = { subtree: true, childList: true, attributes: true,
     attributeFilter: ['data-message-author-role', 'data-turn', 'data-message-id', 'data-testid',
@@ -22,12 +23,12 @@
       'data-chatgpt-agent-turn-start', 'data-app-shell-active-page'] };
   const scopeCSS = '[data-chat-fold-hidden="true"]{display:none!important}' +
     '[data-chat-fold-control]{display:block!important;width:100%;box-sizing:border-box}';
-  let interval;
+  let interval: number | undefined;
   let destroyed = false;
-  let failure = null;
-  const runtime = globalThis.__chatFoldRuntime = {
+  let failure: EngineFailure | null = null;
+  const runtime: FoldRuntime = globalThis.__chatFoldRuntime = {
     protocol: 2,
-    version: '1.0.5',
+    version: chrome.runtime.getManifest().version,
     get error() { return failure; },
     destroy() {
       destroyed = true;
@@ -48,7 +49,7 @@
     }
   };
 
-  function createControl(record) {
+  function createControl(state: AnswerState): AnswerRecord {
     const host = document.createElement("div");
     host.setAttribute("data-chat-fold-control", "");
     const shadow = host.attachShadow({ mode: "open" });
@@ -82,18 +83,18 @@
     }
     wrap.append(button);
     shadow.append(style, wrap);
-    record.host = host;
-    record.button = shadow.querySelector("button");
-    record.label = shadow.querySelector(".label");
-    record.number = shadow.querySelector(".number");
+    const record: AnswerRecord = { ...state, host, button,
+      label: shadow.querySelector<HTMLSpanElement>('.label')!,
+      number: shadow.querySelector<HTMLSpanElement>('.number')! };
     record.button.addEventListener("click", () => {
       record.collapsed = !record.collapsed;
       choices.set(record.key, record.collapsed);
       paint(record);
     });
+    return record;
   }
 
-  function paint(record) {
+  function paint(record: AnswerRecord): void {
     for (const element of record.targets) {
       if (record.collapsed) element.setAttribute('data-chat-fold-hidden', 'true');
       else element.removeAttribute('data-chat-fold-hidden');
@@ -104,12 +105,12 @@
     record.button.setAttribute("aria-label", `${record.collapsed ? "展开" : "收起"}第 ${record.index} 次 AI 回答`);
   }
 
-  function restore(record) {
+  function restore(record: AnswerRecord): void {
     for (const element of record.targets) element.removeAttribute('data-chat-fold-hidden');
     record.host.remove();
   }
 
-  function syncScopes(discovery) {
+  function syncScopes(discovery: DOMDiscovery): void {
     const roots = new Set(discovery.roots.map(scope => scope.root));
     let changed = false;
     for (const [root, style] of scopes) {
@@ -122,16 +123,16 @@
     }
     for (const root of roots) {
       if (!scopes.has(root)) {
-        const owner = root.ownerDocument || root;
+        const owner = root.nodeType === 9 ? root as Document : root.ownerDocument!;
         const style = owner.createElement('style');
         style.setAttribute('data-chat-fold-style', '');
         style.textContent = scopeCSS;
-        (root.head || root).append(style);
+        (root.nodeType === 9 ? (root as Document).head || root : root).append(style);
         root.addEventListener('load', schedule, true);
         scopes.set(root, style);
         changed = true;
-      } else if (!scopes.get(root).isConnected) {
-        (root.head || root).append(scopes.get(root));
+      } else if (!scopes.get(root)!.isConnected) {
+        (root.nodeType === 9 ? (root as Document).head || root : root).append(scopes.get(root)!);
       }
     }
     if (changed) {
@@ -175,12 +176,11 @@
       if (record && stableKey && record.key !== stableKey) {
         restore(record);
         records.delete(answer.element);
-        record = null;
+        record = undefined;
       }
       if (!record) {
         const key = stableKey || `${route}:anonymous-${++sequence}`;
-        record = { element: answer.element, targets: new Set(), key, collapsed: choices.get(key) ?? settings.defaultCollapsed };
-        createControl(record);
+        record = createControl({ element: answer.element, targets: new Set(), key, index: index + 1, collapsed: choices.get(key) ?? settings.defaultCollapsed });
         records.set(answer.element, record);
       }
       const targets = new Set(answer.elements || [answer.element]);
@@ -202,22 +202,24 @@
 
   function safeReconcile() {
     try { reconcile(); failure = null; }
-    catch (error) { failure = { stage: 'render', name: error?.name || 'Error' }; }
+    catch (error) { failure = { stage: 'render', name: DOM.errorName(error) }; }
   }
 
   // Ignore our own DOM insertions. Character changes during streaming need no scan.
   const observer = new MutationObserver(mutations => {
     if (mutations.some(mutation => {
-      if (mutation.target.nodeType === 1 && mutation.target.closest(`${CONTROLS}, [data-chat-fold-style]`)) return false;
+      if (mutation.target.nodeType === 1 && (mutation.target as Element).closest(`${CONTROLS}, [data-chat-fold-style]`)) return false;
       if (mutation.type === "attributes") return true;
       return [...mutation.addedNodes, ...mutation.removedNodes].some(node =>
-        node.nodeType === 1 && !node.matches(`${CONTROLS}, [data-chat-fold-style]`));
+        node.nodeType === 1 && !(node as Element).matches(`${CONTROLS}, [data-chat-fold-style]`));
     })) schedule();
   });
 
-  function onMessage(message, sender, respond) {
+  function onMessage(message: unknown, _sender: chrome.runtime.MessageSender, respond: (value: unknown) => void) {
     // Versioned names prevent an old content script from winning the response race.
-    const type = message?.type?.replace('chat-fold:v2:', 'chat-fold:');
+    if (!message || typeof message !== 'object' || !('type' in message) || typeof message.type !== 'string') return;
+    const request = message as { type: string; collapsed?: unknown };
+    const type = request.type.replace('chat-fold:v2:', 'chat-fold:');
     try {
     if (type === "chat-fold:diagnose") {
       respond({ version: runtime.version, protocol: runtime.protocol, provider: adapter.id,
@@ -227,32 +229,35 @@
       respond({ version: runtime.version, protocol: runtime.protocol, error: failure,
         provider: adapter.label, enabled: settings.enabled, total: records.size,
         collapsed: [...records.values()].filter(record => record.collapsed).length });
-    } else if (type === "chat-fold:set-all" && typeof message.collapsed === "boolean") {
+    } else if (type === "chat-fold:set-all" && typeof request.collapsed === "boolean") {
       reconcile();
       for (const record of records.values()) {
-        record.collapsed = message.collapsed;
+        record.collapsed = request.collapsed;
         choices.set(record.key, record.collapsed);
         paint(record);
       }
       respond({ ok: true });
     }
     } catch (error) {
-      respond({ protocol: 2, version: runtime.version, error: { stage: 'message', name: error?.name || 'Error' } });
+      respond({ protocol: 2, version: runtime.version, error: { stage: 'message', name: DOM.errorName(error) } });
     }
   }
   chrome.runtime.onMessage.addListener(onMessage);
 
-  function onStorageChange(changes, area) {
+  function onStorageChange(changes: Record<string, chrome.storage.StorageChange>, area: string) {
     if (area !== "local") return;
-    for (const name of Object.keys(ChatFold.defaults)) {
-      if (changes[name]) settings[name] = changes[name].newValue ?? ChatFold.defaults[name];
+    for (const name of (Object.keys(ChatFold.defaults) as (keyof FoldSettings)[])) {
+      if (changes[name]) {
+        const value: unknown = changes[name].newValue;
+        settings[name] = typeof value === 'boolean' ? value : ChatFold.defaults[name];
+      }
     }
     safeReconcile();
   }
   chrome.storage.onChanged.addListener(onStorageChange);
 
   async function start() {
-    try { settings = { ...settings, ...await chrome.storage.local.get(ChatFold.defaults) }; }
+    try { settings = { ...settings, ...await chrome.storage.local.get(ChatFold.defaults) as Partial<FoldSettings> }; }
     catch { /* The extension remains useful with defaults if storage is unavailable. */ }
     if (destroyed) return;
     syncScopes(DOM.scan(document));
@@ -266,5 +271,5 @@
     addEventListener("popstate", schedule);
     addEventListener("pageshow", schedule);
   }
-  start().catch(error => { failure = { stage: 'startup', name: error?.name || 'Error' }; });
+  start().catch(error => { failure = { stage: 'startup', name: DOM.errorName(error) }; });
 })();

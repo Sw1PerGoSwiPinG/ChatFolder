@@ -4,7 +4,7 @@ globalThis.ChatFoldProbe = () => {
   const roles = ['assistant', 'user', 'system', 'tool'];
   const roleAttributes = ['data-message-author-role', 'data-turn', 'data-author-role', 'data-message-role', 'data-role', 'data-conversation-role'];
   const discovery = ChatFoldDOM.scan(document);
-  const summarize = root => ({
+  const summarize = (root: DOMScope): StructureSummary => ({
     articles: root.querySelectorAll('article').length,
     turns: root.querySelectorAll('[data-testid^="conversation-turn"]').length,
     modernTurns: root.querySelectorAll('[data-talvt-turn-state]').length,
