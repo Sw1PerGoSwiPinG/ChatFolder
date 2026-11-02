@@ -103,7 +103,7 @@ async function refresh() {
       ? `${result.total} 次回答 · ${result.collapsed} 次已收起` : "暂未识别到回答；如页面已有对话，请查看兼容性诊断。";
     bulkButtons.forEach(button => { button.disabled = !result.enabled || !result.total; });
   } catch (failure) {
-    status.textContent = asError(failure).message || "请刷新 ChatGPT 页面，让留白开始工作。";
+    status.textContent = asError(failure).message || "请刷新 ChatGPT 页面，让ChatFolder开始工作。";
     bulkButtons.forEach(button => { button.disabled = true; });
   }
 }
@@ -124,7 +124,7 @@ async function init() {
     }
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.url || !/^https:\/\/(chatgpt\.com|chat\.openai\.com)\//.test(tab.url)) {
-      status.textContent = "在 ChatGPT 网页打开留白，即可管理回答。";
+      status.textContent = "在 ChatGPT 网页打开ChatFolder，即可管理回答。";
       return;
     }
     tabId = tab.id;

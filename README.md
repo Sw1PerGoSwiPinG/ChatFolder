@@ -1,6 +1,6 @@
-# ChatFolder · 留白
+# ChatFolder
 
-项目仓库名称为 **ChatFolder**，Chrome 扩展显示名称保持「留白 · Chat Fold」。
+项目仓库名称为 **ChatFolder**，Chrome 扩展显示名称保持「ChatFolder」。
 
 当前版本：**1.0.5**。已通过 Chrome DevTools MCP 在用户真实 Chrome 页面验证。
 
@@ -11,7 +11,7 @@
 1. 下载或保留整个项目文件夹。
 2. 在 Chrome 地址栏输入 `chrome://extensions`，打开右上角「开发者模式」。
 3. 点击「加载已解压的扩展程序」，选择包含 `manifest.json` 的文件夹（本项目根目录）。
-4. 打开或刷新 [ChatGPT](https://chatgpt.com/)，建议把「留白」固定到浏览器工具栏。
+4. 打开或刷新 [ChatGPT](https://chatgpt.com/)，建议把「ChatFolder」固定到浏览器工具栏。
 
 **源码安装需先执行 `npm ci` 和 `npm run build`。** 详见 [开发说明](DEVELOPMENT.md)。 不要只选择 `content` 或 `popup` 子目录。安装或更新扩展后，已打开的 ChatGPT 页面需要刷新一次。
 
@@ -95,7 +95,7 @@ Compress-Archive -Path manifest.json,build,content,popup -DestinationPath dist/c
 - 监听页面延迟添加的消息类名和角色属性，覆盖异步渲染的回答。
 - 找不到回答时不再断言会话为空。弹窗新增「兼容性诊断」，可读取结构计数与版本，不包含聊天正文、会话地址或消息 ID。
 
-更新本地文件后，必须在 `chrome://extensions` 点击「留白」卡片的重新加载按钮，再刷新 ChatGPT 页面。若扩展加载自 ZIP 解压目录，需先用新版文件覆盖该目录或重新选择本项目根目录。
+更新本地文件后，必须在 `chrome://extensions` 点击「ChatFolder」卡片的重新加载按钮，再刷新 ChatGPT 页面。若扩展加载自 ZIP 解压目录，需先用新版文件覆盖该目录或重新选择本项目根目录。
 
 ## 1.0.2 通信与诊断修复
 

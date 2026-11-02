@@ -6,7 +6,7 @@
     defaults: { enabled: true, defaultCollapsed: true },
     register(adapter) {
       if (!adapter.id || typeof adapter.matches !== "function" || typeof adapter.findAnswers !== "function") {
-        throw new TypeError("Invalid Chat Fold adapter");
+        throw new TypeError("Invalid ChatFolder adapter");
       }
       adapters.push(adapter);
     },

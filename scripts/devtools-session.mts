@@ -15,7 +15,7 @@ transport.stderr?.on('data', chunk => process.stderr.write(chunk));
 const client = new Client({ name: 'chat-fold-debugger', version: '1.0.0' }, { capabilities: { roots: { listChanged: false } } });
 client.setRequestHandler(ListRootsRequestSchema, () => ({ roots: [{
   uri: pathToFileURL(fileURLToPath(new URL('../', import.meta.url))).href,
-  name: 'Chat Fold workspace'
+  name: 'ChatFolder workspace'
 }] }));
 await client.connect(transport);
 const { tools } = await client.listTools();

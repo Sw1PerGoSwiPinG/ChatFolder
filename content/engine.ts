@@ -56,19 +56,17 @@
     // Avoid innerHTML: host pages can enforce Trusted Types for DOM HTML sinks.
     const style = document.createElement('style');
     style.textContent = `
-      :host { display:block; color-scheme:light dark; }
-      .wrap { max-width:768px; margin:0 auto; padding:9px 24px 19px; box-sizing:border-box; }
-      button { display:flex; align-items:center; gap:10px; padding:9px 13px; border:1px solid #d8e1dc;
-        border-radius:9px; background:#f3f6f3; color:#355847; cursor:pointer; font:13px/1.5 ui-sans-serif,system-ui,sans-serif; }
-      button:hover { background:#e8eee9; border-color:#96b1a0; }
-      button:focus-visible { outline:2px solid #39835d; outline-offset:3px; }
-      .icon { font-size:16px; line-height:1; transition:transform .15s; }
+      :host { display:block; color:inherit; }
+      .wrap { max-width:var(--thread-content-max-width,768px); margin:0 auto; padding:6px 0 12px; box-sizing:border-box; }
+      button { display:flex; align-items:center; gap:8px; padding:6px 10px;
+        border:1px solid color-mix(in srgb,currentColor 20%,transparent); border-radius:6px;
+        background:transparent; color:inherit; cursor:pointer;
+        font:12px/1.5 "Segoe UI Variable Text","Segoe UI","Microsoft YaHei",sans-serif; }
+      button:hover { background:color-mix(in srgb,currentColor 6%,transparent); }
+      button:focus-visible { outline:2px solid #4b83f5; outline-offset:3px; }
+      .icon { font-size:15px; line-height:1; transition:transform .15s; }
       button[aria-expanded="true"] .icon { transform:rotate(90deg); }
-      .number { font:11px ui-monospace,monospace; opacity:.6; padding-left:8px; border-left:1px solid #aebfb3; }
-      @media(prefers-color-scheme:dark) {
-        button { background:#242e28; border-color:#3b4c40; color:#c3dacb; }
-        button:hover { background:#303e34; border-color:#729980; }
-      }
+      .number { font-size:10px; font-variant-numeric:tabular-nums; opacity:.5; }
       @media(prefers-reduced-motion:reduce) { .icon { transition:none; } }
     `;
     const wrap = document.createElement('div');
