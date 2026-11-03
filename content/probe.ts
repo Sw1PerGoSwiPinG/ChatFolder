@@ -11,6 +11,7 @@ globalThis.ChatFoldProbe = () => {
     activeModernTurns: [...root.querySelectorAll('[data-talvt-turn-state]')].filter(turn => !turn.closest('[data-app-shell-active-page="false"]')).length,
     markdownBlocks: root.querySelectorAll('.markdown, .prose, [data-markdown-text-style], [data-dil-message-id]').length,
     controls: root.querySelectorAll('[data-chat-fold-control]').length,
+    userControls: root.querySelectorAll('[data-chat-fold-user-control]').length,
     frames: root.querySelectorAll('iframe').length,
     roles: Object.fromEntries(roleAttributes.map(attribute => [attribute,
       Object.fromEntries(roles.map(role => [role, root.querySelectorAll(`[${attribute}="${role}"]`).length]))]))

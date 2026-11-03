@@ -1,6 +1,8 @@
 interface FoldSettings {
   enabled: boolean;
   defaultCollapsed: boolean;
+  userEnabled: boolean;
+  userLines: number;
 }
 
 type DOMScope = Document | ShadowRoot;
@@ -30,6 +32,7 @@ interface ProviderAdapter {
   label: string;
   matches(location: Location): boolean;
   findAnswers(document: Document, scopes?: DOMDiscovery): AnswerDescriptor[];
+  findUserMessages?(document: Document, scopes?: DOMDiscovery): { element: HTMLElement; key: string | null }[];
   diagnose?(document: Document): Record<string, unknown>;
 }
 interface AdapterRegistry {
@@ -53,6 +56,22 @@ interface FoldStatus {
   enabled: boolean;
   total: number;
   collapsed: number;
+  users: UserFoldStatus;
+}
+
+interface UserFoldStatus { enabled: boolean; lines: number; total: number; collapsed: number }
+interface UserFoldController {
+  reconcile(settings: FoldSettings, discovery: DOMDiscovery): void;
+  status(): UserFoldStatus;
+  setAll(collapsed: boolean): void;
+  contains(node: Node): boolean;
+  ignoreMutation(mutation: MutationRecord): boolean;
+  reset(): void;
+  destroy(): void;
+}
+interface UserFoldFactory {
+  css: string;
+  create(adapter: ProviderAdapter, document: Document, schedule: () => void): UserFoldController;
 }
 
 interface AnswerState {
@@ -76,6 +95,7 @@ interface StructureSummary {
   activeModernTurns: number;
   markdownBlocks: number;
   controls: number;
+  userControls: number;
   frames: number;
   roles: Record<string, Record<string, number>>;
 }
@@ -102,3 +122,4 @@ declare var ChatFoldDOM: DOMAccess;
 declare var ChatFold: AdapterRegistry;
 declare var __chatFoldRuntime: FoldRuntime | undefined;
 declare var ChatFoldProbe: (() => DiagnosticResponse) | undefined;
+declare var ChatFoldUsers: UserFoldFactory;

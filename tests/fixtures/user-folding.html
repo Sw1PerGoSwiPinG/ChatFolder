@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ChatFolder user folding fixture</title>
+  <style>
+    *{box-sizing:border-box}body{margin:32px auto;padding:0 20px;max-width:800px;font:16px/24px "Segoe UI","Microsoft YaHei",sans-serif;color:#e7eaf0;background:#101114}
+    h1{font-size:18px;margin-bottom:28px}.user-turn{display:flex;flex-direction:column;align-items:flex-end;width:100%;margin:24px 0}
+    [data-user-message-bubble]{max-width:80%;padding:10px 16px;border:1px solid #204d84;border-radius:18px;background:#1b4073;color:#fff;white-space:pre-wrap;overflow-wrap:anywhere}
+    .answer{margin:12px 0;color:#afb8c7}#responsive{width:600px;max-width:100%}
+    @media(prefers-color-scheme:light){body{background:#fff;color:#202733}.answer{color:#626e7d}}
+  </style>
+</head>
+<body role="region" aria-label="用户输入折叠预览">
+  <h1>用户输入折叠 · 渲染测试</h1>
+  <div data-turn-key="short" class="user-turn"><div id="short" data-user-message-bubble>短输入</div></div>
+  <div data-turn-key="wrapped" class="user-turn"><div id="wrapped" data-user-message-bubble>这段输入没有手动换行，用于验证浏览器根据实际可用宽度产生的自动换行。消息长度不应按字符数量估算，而应根据字体、字号、字间距和容器宽度形成的真实行数判断。窗口变窄后应该重新判断，展开后应恢复完整的文字内容，再次点击可以收起。</div></div>
+  <div data-turn-key="explicit" class="user-turn"><div id="explicit" data-user-message-bubble style="--chatfolder-user-lines:7!important">第一行
+
+第三行
+第四行</div></div>
+  <div data-turn-key="rich" class="user-turn"><div id="rich" data-user-message-bubble><span>带有<strong>粗体文字</strong>和<a href="#rich" style="color:inherit">行内链接</a>的输入同样根据实际排版折叠。这里再增加一些文字，确保能够跨过多行。<br>这是另一行。</span></div></div>
+  <div id="responsive" data-turn-key="responsive" class="user-turn"><div id="responsive-text" data-user-message-bubble>一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十</div></div>
+  <div contenteditable="true" aria-label="未发送草稿"><div data-user-message-bubble>这个编辑器中的文字不会被折叠。这是未发送的草稿，不是历史用户消息。</div></div>
+</body>
+</html>

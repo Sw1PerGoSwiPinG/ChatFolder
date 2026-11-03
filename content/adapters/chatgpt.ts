@@ -95,6 +95,22 @@
     label: "ChatGPT",
     matches: location => ["chatgpt.com", "chat.openai.com"].includes(location.hostname),
     findAnswers,
+    findUserMessages(document, discovery = ChatFoldDOM.scan(document)) {
+      const candidates = new Set<HTMLElement>();
+      for (const { root } of discovery.roots) {
+        for (const element of root.querySelectorAll<HTMLElement>('[data-user-message-bubble], [data-testid="user-message-bubble"], [data-testid="user-message"], [data-message-author-role="user"]')) {
+          if (inactive(element) || element.closest('[contenteditable]:not([contenteditable="false"]), [data-chatgpt-composer], [data-composer-input]')) continue;
+          const bubble = element.matches('[data-user-message-bubble], [data-testid="user-message-bubble"]') ? element
+            : element.querySelector<HTMLElement>('[data-user-message-bubble], [data-testid="user-message-bubble"], .whitespace-pre-wrap') || element;
+          candidates.add(bubble);
+        }
+      }
+      return [...candidates].filter(element => ![...candidates].some(other => other !== element && other.contains(element)))
+        .sort(ChatFoldDOM.compare).map(element => {
+          const identified = element.closest('[data-message-id], [data-chatgpt-search-unit-key], [data-turn-key]');
+          return { element, key: identified?.getAttribute('data-message-id') || identified?.getAttribute('data-chatgpt-search-unit-key') || identified?.getAttribute('data-turn-key') || null };
+        });
+    },
     diagnose(document) {
       // Structural metadata only: no text, URLs, message IDs or HTML are exported.
       const attributes = ['data-message-author-role', 'data-turn', 'data-author-role', 'data-message-role', 'data-role', 'data-conversation-role'];

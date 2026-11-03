@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChatFolder",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "收起 AI 的长篇回答，让问题成为对话目录。支持 ChatGPT，可逐条展开。",
   "permissions": [
     "storage",
@@ -22,6 +22,7 @@
         "build/content/dom.js",
         "build/content/registry.js",
         "build/content/adapters/chatgpt.js",
+        "build/content/user-fold.js",
         "build/content/engine.js"
       ],
       "css": [

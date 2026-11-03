@@ -8,10 +8,11 @@ const answer = (id, text = 'A long answer') => `<article data-testid="conversati
 const user = '<article data-testid="conversation-turn-user"><div data-message-author-role="user">My question</div></article>';
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-async function setup(t, html = user + answer('a'), settings = {}, trustedTypes = false) {
+async function setup(t, html = user + answer('a'), settings = {}, trustedTypes = false, initialiseWindow = () => {}) {
   const dom = new JSDOM(`<main>${html}</main>`, { url: 'https://chatgpt.com/c/first', runScripts: 'outside-only' });
   t.after(() => dom.window.close());
   const { window } = dom;
+  initialiseWindow(window);
   if (trustedTypes) Object.defineProperty(window.ShadowRoot.prototype, 'innerHTML', {
     set() { throw new TypeError('TrustedHTML required'); }
   });
@@ -25,7 +26,7 @@ async function setup(t, html = user + answer('a'), settings = {}, trustedTypes =
       onChanged: { addListener(fn) { onChange = fn; }, removeListener(fn) { if (onChange === fn) onChange = null; } }
     }
   };
-  for (const file of ['build/content/dom.js', 'build/content/registry.js', 'build/content/adapters/chatgpt.js', 'build/content/engine.js']) {
+  for (const file of ['build/content/dom.js', 'build/content/registry.js', 'build/content/adapters/chatgpt.js', 'build/content/user-fold.js', 'build/content/engine.js']) {
     window.eval(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'));
   }
   await sleep(10);
@@ -181,7 +182,7 @@ test('creates working buttons even when Trusted Types rejects HTML string inject
 test('reinjection tears down the previous engine and does not duplicate buttons', async t => {
   const app = await setup(t);
   const old = app.window.__chatFoldRuntime;
-  for (const file of ['build/content/dom.js', 'build/content/registry.js', 'build/content/adapters/chatgpt.js', 'build/content/engine.js']) {
+  for (const file of ['build/content/dom.js', 'build/content/registry.js', 'build/content/adapters/chatgpt.js', 'build/content/user-fold.js', 'build/content/engine.js']) {
     app.window.eval(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'));
   }
   await sleep(10);
@@ -395,4 +396,112 @@ test('modern user-only turns are left alone until an assistant turn begins', asy
   await sleep(110);
   assert.equal(app.controls().length, 1);
   assert.equal(app.document.getElementById('user').closest('[data-chat-fold-hidden]'), null);
+});
+
+const userBubble = (id, lines) => `<div data-turn-key="${id}" style="display:flex;flex-direction:column"><div data-user-message-bubble data-rendered-lines="${lines}" id="${id}">User input ${id}</div></div>`;
+function mockUserLayout(window) {
+  const original = window.HTMLElement.prototype.getBoundingClientRect;
+  window.HTMLElement.prototype.getBoundingClientRect = function () {
+    if (!this.matches('[data-user-message-bubble]')) return original.call(this);
+    const width = Number(this.getAttribute('data-rendered-width') || 400);
+    const lines = Number(this.getAttribute('data-rendered-lines') || 1);
+    const shown = this.hasAttribute('data-chat-fold-user-collapsed') ? Math.min(lines, Number(this.style.getPropertyValue('--chatfolder-user-lines')) || 1) : lines;
+    return { x: 0, y: 0, top: 0, left: 0, width, height: shown * 24 + 20, right: width, bottom: shown * 24 + 20, toJSON() {} };
+  };
+}
+const userControls = app => [...app.document.querySelectorAll('[data-chat-fold-user-control]')];
+
+test('user folding defaults to one line and adds controls only to overflowing messages', async t => {
+  const app = await setup(t, userBubble('short', 1) + userBubble('long', 4) + answer('a'), {}, false, mockUserLayout);
+  assert.equal(userControls(app).length, 1);
+  const bubble = app.document.getElementById('long');
+  assert.equal(bubble.getAttribute('data-chat-fold-user-collapsed'), '');
+  assert.equal(bubble.style.getPropertyValue('--chatfolder-user-lines'), '1');
+  assert.equal(userControls(app)[0].style.getPropertyValue('width'), '400px');
+  assert.equal(bubble.nextSibling, userControls(app)[0]);
+  const status = app.message({ type: 'chat-fold:v2:status' });
+  assert.equal(status.users.total, 1);
+  assert.equal(status.users.collapsed, 1);
+  assert.equal(status.total, 1);
+  userControls(app)[0].shadowRoot.querySelector('button').click();
+  assert.equal(bubble.hasAttribute('data-chat-fold-user-collapsed'), false);
+  assert.equal(app.message({ type: 'chat-fold:status' }).collapsed, 1);
+  assert.equal(bubble.textContent, 'User input long');
+});
+
+test('user bulk actions and enabling are independent from answer folding', async t => {
+  const app = await setup(t, userBubble('one', 3) + userBubble('two', 5) + answer('a'), {}, false, mockUserLayout);
+  app.message({ type: 'chat-fold:v2:set-users', collapsed: false });
+  assert.equal(app.message({ type: 'chat-fold:status' }).users.collapsed, 0);
+  assert.equal(app.message({ type: 'chat-fold:status' }).collapsed, 1);
+  app.change({ enabled: { newValue: false } });
+  assert.equal(userControls(app).length, 2);
+  app.message({ type: 'chat-fold:v2:set-users', collapsed: true });
+  assert.equal(app.message({ type: 'chat-fold:status' }).users.collapsed, 2);
+  app.change({ userEnabled: { newValue: false } });
+  assert.equal(userControls(app).length, 0);
+  assert.equal(app.document.querySelectorAll('[data-chat-fold-user-collapsed]').length, 0);
+  assert.equal(app.document.getElementById('one').style.getPropertyValue('--chatfolder-user-lines'), '');
+  app.change({ userEnabled: { newValue: true } });
+  assert.equal(userControls(app).length, 2);
+});
+
+test('changing line limits re-evaluates eligibility while preserving manual expansion choices', async t => {
+  const app = await setup(t, userBubble('one', 2) + userBubble('two', 5), {}, false, mockUserLayout);
+  userControls(app)[1].shadowRoot.querySelector('button').click();
+  app.change({ userLines: { newValue: 3 } });
+  assert.equal(userControls(app).length, 1);
+  assert.equal(app.document.getElementById('one').hasAttribute('data-chat-fold-user-collapsed'), false);
+  assert.equal(app.document.getElementById('two').hasAttribute('data-chat-fold-user-collapsed'), false);
+  app.change({ userLines: { newValue: 1 } });
+  assert.equal(userControls(app).length, 2);
+  assert.equal(app.document.getElementById('two').hasAttribute('data-chat-fold-user-collapsed'), false);
+  for (const invalid of [0, -1, 1.5, NaN, Infinity, '3']) {
+    app.change({ userLines: { newValue: invalid } });
+    assert.equal(app.message({ type: 'chat-fold:status' }).users.lines, 1);
+  }
+});
+
+test('editing existing user text and replacing messages update user controls without duplicates', async t => {
+  const app = await setup(t, userBubble('edited', 1), {}, false, mockUserLayout);
+  const bubble = app.document.getElementById('edited');
+  bubble.setAttribute('data-rendered-lines', '4');
+  bubble.firstChild.data = 'Edited user input';
+  await sleep(110);
+  assert.equal(userControls(app).length, 1);
+  userControls(app)[0].shadowRoot.querySelector('button').click();
+  bubble.parentElement.outerHTML = userBubble('edited', 4);
+  await sleep(110);
+  assert.equal(userControls(app).length, 1);
+  assert.equal(app.document.getElementById('edited').hasAttribute('data-chat-fold-user-collapsed'), false);
+});
+
+test('resize notifications remeasure widths and controller teardown restores preexisting styles', async t => {
+  let callback;
+  let originalPriority;
+  const app = await setup(t, userBubble('resized', 3), {}, false, window => {
+    mockUserLayout(window);
+    window.ResizeObserver = class { constructor(fn) { callback = fn; } observe() {} unobserve() {} disconnect() {} };
+    window.document.getElementById('resized').style.setProperty('--chatfolder-user-lines', '7', 'important');
+    originalPriority = window.document.getElementById('resized').style.getPropertyPriority('--chatfolder-user-lines');
+  });
+  const bubble = app.document.getElementById('resized');
+  bubble.setAttribute('data-rendered-width', '240');
+  callback([{ target: bubble }]);
+  await sleep(110);
+  assert.equal(userControls(app)[0].style.getPropertyValue('width'), '240px');
+  app.window.__chatFoldRuntime.destroy();
+  assert.equal(userControls(app).length, 0);
+  assert.equal(bubble.style.getPropertyValue('--chatfolder-user-lines'), '7');
+  assert.equal(bubble.style.getPropertyPriority('--chatfolder-user-lines'), originalPriority);
+  assert.equal(bubble.hasAttribute('data-chat-fold-user-collapsed'), false);
+});
+
+test('user detection excludes composers and inactive pages and supports older user markup', async t => {
+  const html = `<div data-app-shell-active-page="false">${userBubble('cached', 3)}</div><div contenteditable="true">${userBubble('draft', 3)}</div>` +
+    '<div data-message-author-role="user"><div class="whitespace-pre-wrap" id="old">Legacy prompt</div></div>' + userBubble('active', 3);
+  const app = await setup(t, html, {}, false, mockUserLayout);
+  assert.equal(userControls(app).length, 1);
+  const adapter = app.window.ChatFold.resolve(app.window.location);
+  assert.deepEqual([...adapter.findUserMessages(app.document)].map(message => message.element.id), ['old', 'active']);
 });

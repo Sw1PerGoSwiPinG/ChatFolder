@@ -1,6 +1,6 @@
 {
   "name": "chatfolder",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "A local-first Chrome extension that folds ChatGPT answers",
   "scripts": {
@@ -8,7 +8,8 @@
     "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json",
     "pretest": "npm run build",
     "test": "tsx --test tests/*.test.ts",
-    "debug:browser": "tsx scripts/devtools-session.mts"
+    "debug:browser": "tsx scripts/devtools-session.mts",
+    "test:browser-fixture": "tsx scripts/user-folding-fixture.mts"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",

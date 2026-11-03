@@ -3,18 +3,24 @@
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ChatFolder</title><link rel="stylesheet" href="popup.css"></head>
 <body>
   <header>
-    <div class="brand"><span class="brand-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5.5h6l2 2h8v11H4z"/><path d="m9 11 3 3 3-3"/></svg></span><div><h1>ChatFolder</h1><p>按需展开 AI 回答</p></div></div>
+    <div class="brand"><span class="brand-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5.5h6l2 2h8v11H4z"/><path d="m9 11 3 3 3-3"/></svg></span><div><h1>ChatFolder</h1><p>让长对话更易浏览</p></div></div>
     <span id="version" class="version"></span>
   </header>
   <main>
     <section class="settings" aria-label="折叠设置">
-      <label class="setting"><span><strong>启用折叠</strong><small>保留问题，收起回答</small></span><input id="enabled" type="checkbox" role="switch"><span class="switch" aria-hidden="true"></span></label>
+      <label class="setting"><span><strong>折叠 AI 回答</strong><small>独立展开每次回答</small></span><input id="enabled" type="checkbox" role="switch"><span class="switch" aria-hidden="true"></span></label>
       <label class="setting"><span><strong>自动收起新回答</strong><small>点击对应按钮即可展开</small></span><input id="defaultCollapsed" type="checkbox" role="switch"><span class="switch" aria-hidden="true"></span></label>
     </section>
     <section class="conversation" aria-label="当前会话">
       <div class="section-label"><span>当前会话</span><span id="provider">—</span></div>
       <p id="status" role="status" aria-live="polite">正在连接页面…</p>
       <div class="actions"><button id="collapse" type="button" disabled>全部收起</button><button id="expand" type="button" disabled>全部展开</button></div>
+    </section>
+    <section class="user-folding" aria-label="用户输入折叠">
+      <label class="setting"><span><strong>折叠用户输入</strong><small>长消息只保留指定行数</small></span><input id="userEnabled" type="checkbox" role="switch"><span class="switch" aria-hidden="true"></span></label>
+      <div class="line-setting"><label for="userLines">收起后显示</label><span><input id="userLines" type="number" min="1" step="1" value="1" inputmode="numeric" aria-describedby="user-status"> 行</span></div>
+      <p id="user-status" class="user-status" role="status" aria-live="polite">按页面实际换行判断长度</p>
+      <div class="actions"><button id="collapse-users" type="button" disabled>收起全部输入</button><button id="expand-users" type="button" disabled>展开全部输入</button></div>
     </section>
     <p id="error" role="alert" hidden></p>
     <details id="diagnostics"><summary>诊断与帮助</summary><div class="diagnostic-body">

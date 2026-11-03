@@ -16,13 +16,14 @@
   const scopes = new Map<DOMScope, HTMLStyleElement>();
   const scopeIds = new WeakMap<Node, number>();
   let nextScopeId = 0;
-  const observationOptions = { subtree: true, childList: true, attributes: true,
-    attributeFilter: ['data-message-author-role', 'data-turn', 'data-message-id', 'data-testid',
+  const users = ChatFoldUsers.create(adapter, document, schedule);
+  const observationOptions = { subtree: true, childList: true, characterData: true, attributes: true,
+    attributeFilter: ['data-message-author-role', 'data-turn', 'data-message-id', 'data-testid', 'style',
       'data-author-role', 'data-message-role', 'data-role', 'aria-label', 'class', 'src',
       'data-conversation-role', 'data-turn-key', 'data-talvt-turn-state',
       'data-chatgpt-agent-turn-start', 'data-app-shell-active-page'] };
   const scopeCSS = '[data-chat-fold-hidden="true"]{display:none!important}' +
-    '[data-chat-fold-control]{display:block!important;width:100%;box-sizing:border-box}';
+    '[data-chat-fold-control]{display:block!important;width:100%;box-sizing:border-box}' + ChatFoldUsers.css;
   let interval: number | undefined;
   let destroyed = false;
   let failure: EngineFailure | null = null;
@@ -35,6 +36,7 @@
       clearTimeout(timer);
       clearInterval(interval);
       observer.disconnect();
+      users.destroy();
       for (const [root, style] of scopes) {
         root.removeEventListener('load', schedule, true);
         style.remove();
@@ -44,6 +46,7 @@
       chrome.storage.onChanged.removeListener(onStorageChange);
       removeEventListener('popstate', schedule);
       removeEventListener('pageshow', schedule);
+      removeEventListener('resize', schedule);
       for (const record of records.values()) restore(record);
       records.clear();
     }
@@ -147,16 +150,18 @@
       route = location.pathname;
       // Keep only this tab's live conversation state; never store answer text.
       choices.clear();
+      users.reset();
       for (const record of records.values()) restore(record);
       records.clear();
     }
+    const discovery = DOM.scan(document);
+    syncScopes(discovery);
+    users.reconcile(settings, discovery);
     if (!settings.enabled) {
       for (const record of records.values()) restore(record);
       records.clear();
       return;
     }
-    const discovery = DOM.scan(document);
-    syncScopes(discovery);
     const answers = adapter.findAnswers(document, discovery);
     const live = new Set(answers.map(answer => answer.element));
     for (const [element, record] of records) {
@@ -207,6 +212,8 @@
   const observer = new MutationObserver(mutations => {
     if (mutations.some(mutation => {
       if (mutation.target.nodeType === 1 && (mutation.target as Element).closest(`${CONTROLS}, [data-chat-fold-style]`)) return false;
+      if (users.ignoreMutation(mutation)) return false;
+      if (mutation.type === 'characterData' || users.contains(mutation.target)) return users.contains(mutation.target);
       if (mutation.type === "attributes") return true;
       return [...mutation.addedNodes, ...mutation.removedNodes].some(node =>
         node.nodeType === 1 && !(node as Element).matches(`${CONTROLS}, [data-chat-fold-style]`));
@@ -226,7 +233,11 @@
       safeReconcile();
       respond({ version: runtime.version, protocol: runtime.protocol, error: failure,
         provider: adapter.label, enabled: settings.enabled, total: records.size,
-        collapsed: [...records.values()].filter(record => record.collapsed).length });
+        collapsed: [...records.values()].filter(record => record.collapsed).length, users: users.status() });
+    } else if (type === 'chat-fold:set-users' && typeof request.collapsed === 'boolean') {
+      reconcile();
+      users.setAll(request.collapsed);
+      respond({ ok: true });
     } else if (type === "chat-fold:set-all" && typeof request.collapsed === "boolean") {
       reconcile();
       for (const record of records.values()) {
@@ -247,7 +258,8 @@
     for (const name of (Object.keys(ChatFold.defaults) as (keyof FoldSettings)[])) {
       if (changes[name]) {
         const value: unknown = changes[name].newValue;
-        settings[name] = typeof value === 'boolean' ? value : ChatFold.defaults[name];
+        if (name === 'userLines') settings.userLines = typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 ? value : 1;
+        else settings[name] = typeof value === 'boolean' ? value : ChatFold.defaults[name];
       }
     }
     safeReconcile();
@@ -257,6 +269,7 @@
   async function start() {
     try { settings = { ...settings, ...await chrome.storage.local.get(ChatFold.defaults) as Partial<FoldSettings> }; }
     catch { /* The extension remains useful with defaults if storage is unavailable. */ }
+    if (!Number.isSafeInteger(settings.userLines) || settings.userLines < 1) settings.userLines = 1;
     if (destroyed) return;
     syncScopes(DOM.scan(document));
     safeReconcile();
@@ -268,6 +281,7 @@
     }, 750);
     addEventListener("popstate", schedule);
     addEventListener("pageshow", schedule);
+    addEventListener('resize', schedule);
   }
   start().catch(error => { failure = { stage: 'startup', name: DOM.errorName(error) }; });
 })();

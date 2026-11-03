@@ -3,7 +3,7 @@
   // Adapters only discover answer containers; the engine owns UI and state.
   const adapters: ProviderAdapter[] = [];
   globalThis.ChatFold = {
-    defaults: { enabled: true, defaultCollapsed: true },
+    defaults: { enabled: true, defaultCollapsed: true, userEnabled: true, userLines: 1 },
     register(adapter) {
       if (!adapter.id || typeof adapter.matches !== "function" || typeof adapter.findAnswers !== "function") {
         throw new TypeError("Invalid ChatFolder adapter");

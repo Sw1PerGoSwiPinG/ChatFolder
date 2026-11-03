@@ -3,8 +3,8 @@
   "compilerOptions": {
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "types": ["node"],
+    "types": ["node", "chrome"],
     "noEmit": true
   },
-  "include": ["scripts/**/*.mts"]
+  "include": ["scripts/**/*.mts", "tests/browser/**/*.mts"]
 }

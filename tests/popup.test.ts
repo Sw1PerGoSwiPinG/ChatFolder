@@ -24,8 +24,8 @@ async function setup(t, url, connected = true, options = {}) {
           throw Error('No receiver');
         }
         messages.push(message);
-        if (message.type === 'chat-fold:v2:set-all') return { ok: true };
-        return { protocol: 2, version: options.pageVersion || '1.0.5', provider: 'ChatGPT', total: 3, collapsed: 2, enabled: true };
+        if (message.type === 'chat-fold:v2:set-all' || message.type === 'chat-fold:v2:set-users') return { ok: true };
+        return { protocol: 2, version: options.pageVersion || '1.0.5', provider: 'ChatGPT', total: 3, collapsed: 2, enabled: true, users: {enabled: true, lines: 1, total: 2, collapsed: 2} };
       }
     },
     scripting: {
@@ -143,4 +143,33 @@ test('displays runtime probe errors separately from injection failures', async t
   const result = JSON.parse(app.document.getElementById('diagnosticOutput').value);
   assert.equal(result.error, 'PROBE_RUNTIME_ERROR');
   assert.equal(result.exception.name, 'TypeError');
+});
+
+test('user controls persist their independent toggle and positive integer line limit', async t => {
+  const app = await setup(t, 'https://chatgpt.com/');
+  const lines = app.document.getElementById('userLines');
+  assert.equal(lines.value, '1');
+  assert.equal(app.document.getElementById('expand-users').disabled, false);
+  assert.match(app.document.getElementById('user-status').textContent, /2 条长输入/);
+  lines.value = '3';
+  lines.dispatchEvent(new app.window.Event('change'));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(app.saved.at(-1).userLines, 3);
+  for (const value of ['', '0', '-2', '1.5']) {
+    const count = app.saved.length;
+    lines.value = value;
+    lines.dispatchEvent(new app.window.Event('change'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(app.saved.length, count);
+    assert.equal(lines.value, '3');
+  }
+  app.document.getElementById('expand-users').click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.ok(app.messages.some(message => message.type === 'chat-fold:v2:set-users' && message.collapsed === false));
+  const toggle = app.document.getElementById('userEnabled');
+  toggle.checked = false;
+  toggle.dispatchEvent(new app.window.Event('change'));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(app.saved.at(-1).userEnabled, false);
+  assert.equal(lines.disabled, true);
 });
