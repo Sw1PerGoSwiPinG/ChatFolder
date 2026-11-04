@@ -30,17 +30,18 @@ lines. Its output is stored only in the ignored `artifacts/` directory.
 
 ## User input folding
 
-User inputs longer than the configured rendered line limit are collapsed by
-default. The default limit is 1 line. The popup has an independent input-folding
-switch, a positive integer line limit and separate input bulk actions. Pausing
-answer folding does not pause input folding. Editable drafts are excluded.
+Every sent user input has a low-profile drawer button below the bubble,
+including short messages. Inputs start expanded; clicking the drawer collapses
+an input to at most the configured rendered line limit (default: 1). The popup
+has an independent toggle, a positive integer line limit and input bulk actions.
+Editable drafts and inactive cached pages are excluded.
 
-The browser's native line clamp determines the displayed lines. Full and clamped
-heights determine overflow, including soft wrapping, explicit newlines, inline
-markup and padding. Width changes, font loading and content changes trigger a
-new measurement. Content-box overflow clipping prevents the bubble's bottom
-padding from revealing part of the next line. Disabling input folding restores
-the original element styles.
+Native line clamping is combined with a height cap based on the text's computed
+line height and bubble padding/borders. The height cap also handles ChatGPT's
+nested block/flex message structure, where native line clamping alone has no
+effect. Short inputs keep their natural height. Controls never depend on overflow
+detection. Width, font and content changes refresh measurements. Disabling input
+folding restores original styles.
 
 The jsdom tests cover controller state and mocked geometry. For real Chrome
 layout checks, run `npm run build` and `npm run test:browser-fixture`, then open

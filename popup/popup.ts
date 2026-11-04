@@ -107,7 +107,7 @@ async function refresh() {
       ? `${result.total} 次回答 · ${result.collapsed} 次已收起` : "暂未识别到回答；如页面已有对话，请查看兼容性诊断。";
     bulkButtons.forEach(button => { button.disabled = !result.enabled || !result.total; });
     element<HTMLElement>('user-status').textContent = !result.users.enabled ? '用户输入折叠已暂停。' : result.users.total
-      ? `${result.users.total} 条长输入 · ${result.users.collapsed} 条已收起` : '没有超过指定行数的用户输入。';
+      ? `${result.users.total} 条用户输入 · ${result.users.collapsed} 条已收起` : '暂未识别到用户输入。';
     userButtons.forEach(button => { button.disabled = !result.users.enabled || !result.users.total; });
   } catch (failure) {
     status.textContent = asError(failure).message || "请刷新 ChatGPT 页面，让ChatFolder开始工作。";

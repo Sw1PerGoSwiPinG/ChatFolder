@@ -32,7 +32,7 @@ async function setup(t, html = user + answer('a'), settings = {}, trustedTypes =
   await sleep(10);
   return {
     window, document: window.document,
-    controls: () => [...window.document.querySelectorAll('[data-chat-fold-control]')],
+    controls: () => [...window.document.querySelectorAll('[data-chat-fold-control]:not([data-chat-fold-user-control])')],
     message: message => { let result; onMessage(message, {}, value => { result = value; }); return result; },
     change: changes => onChange(changes, 'local')
   };
@@ -202,7 +202,7 @@ test('versioned status reports render failures instead of dropping the message r
   assert.doesNotMatch(JSON.stringify(result), /private text/);
   const diagnostic = app.window.eval(fs.readFileSync(path.join(__dirname, '../build/content/probe.js'), 'utf8') + '\nChatFoldProbe()');
   assert.equal(diagnostic.engineError.name, 'TypeError');
-  assert.equal(diagnostic.structure.controls, 1);
+  assert.equal(diagnostic.structure.controls, 2);
 });
 
 test('finds and folds answers when the top document has zero articles and three shadow roots', async t => {
@@ -214,7 +214,7 @@ test('finds and folds answers when the top document has zero articles and three 
   const status = app.message({ type: 'chat-fold:v2:status' });
   assert.equal(app.document.querySelectorAll('article').length, 0);
   assert.equal(status.total, 1);
-  const control = chat.querySelector('[data-chat-fold-control]');
+  const control = chat.querySelector('[data-chat-fold-control]:not([data-chat-fold-user-control])');
   assert.ok(control);
   assert.match(chat.querySelector('[data-chat-fold-style]').textContent, /display:none!important/);
   assert.equal(chat.querySelector('[data-message-id="nested"]').closest('article').getAttribute('data-chat-fold-hidden'), 'true');
@@ -226,14 +226,14 @@ test('finds and folds answers when the top document has zero articles and three 
   template.innerHTML = answer('streamed');
   chat.append(template.content);
   await sleep(110);
-  assert.equal(chat.querySelectorAll('[data-chat-fold-control]').length, 2);
+  assert.equal(chat.querySelectorAll('[data-chat-fold-control]:not([data-chat-fold-user-control])').length, 2);
   const diagnostic = app.window.eval(fs.readFileSync(path.join(__dirname, '../build/content/probe.js'), 'utf8') + '\nChatFoldProbe()');
   assert.equal(diagnostic.structure.articles, 0);
   assert.equal(diagnostic.nested.contexts.filter(context => context.kind === 'shadow').length, 3);
   assert.equal(diagnostic.nested.contexts.find(context => context.kind === 'shadow' && context.articles).articles, 3);
   app.change({ enabled: { newValue: false } });
   assert.equal(chat.querySelectorAll('[data-chat-fold-hidden]').length, 0);
-  assert.equal(chat.querySelectorAll('[data-chat-fold-control]').length, 0);
+  assert.equal(chat.querySelectorAll('[data-chat-fold-control]:not([data-chat-fold-user-control])').length, 0);
 });
 
 test('walks nested shadow roots, protects user-hosted shadow content and deduplicates answer-hosted shadows', async t => {
@@ -257,7 +257,7 @@ test('finds frame answers and later streams, including shadows inside a same-ori
   const shadow = frameDocument.querySelector('#nested').attachShadow({ mode: 'open' });
   shadow.innerHTML = answer('b');
   assert.equal(app.message({ type: 'chat-fold:v2:status' }).total, 2);
-  assert.equal(frameDocument.querySelectorAll('[data-chat-fold-control]').length, 1);
+  assert.equal(frameDocument.querySelectorAll('[data-chat-fold-control]:not([data-chat-fold-user-control])').length, 1);
   assert.ok(frameDocument.head.querySelector('[data-chat-fold-style]'));
   assert.ok(shadow.querySelector('[data-chat-fold-style]'));
   frameDocument.body.insertAdjacentHTML('beforeend', answer('c'));
@@ -411,19 +411,21 @@ function mockUserLayout(window) {
 }
 const userControls = app => [...app.document.querySelectorAll('[data-chat-fold-user-control]')];
 
-test('user folding defaults to one line and adds controls only to overflowing messages', async t => {
+test('every user input has a drawer, starts expanded, and can be collapsed to one line', async t => {
   const app = await setup(t, userBubble('short', 1) + userBubble('long', 4) + answer('a'), {}, false, mockUserLayout);
-  assert.equal(userControls(app).length, 1);
+  assert.equal(userControls(app).length, 2);
+  assert.equal(app.message({ type: 'chat-fold:v2:status' }).users.collapsed, 0);
   const bubble = app.document.getElementById('long');
+  userControls(app)[1].shadowRoot.querySelector('button').click();
   assert.equal(bubble.getAttribute('data-chat-fold-user-collapsed'), '');
   assert.equal(bubble.style.getPropertyValue('--chatfolder-user-lines'), '1');
-  assert.equal(userControls(app)[0].style.getPropertyValue('width'), '400px');
-  assert.equal(bubble.nextSibling, userControls(app)[0]);
+  assert.equal(userControls(app)[1].style.getPropertyValue('width'), '400px');
+  assert.equal(bubble.nextSibling, userControls(app)[1]);
   const status = app.message({ type: 'chat-fold:v2:status' });
-  assert.equal(status.users.total, 1);
+  assert.equal(status.users.total, 2);
   assert.equal(status.users.collapsed, 1);
   assert.equal(status.total, 1);
-  userControls(app)[0].shadowRoot.querySelector('button').click();
+  userControls(app)[1].shadowRoot.querySelector('button').click();
   assert.equal(bubble.hasAttribute('data-chat-fold-user-collapsed'), false);
   assert.equal(app.message({ type: 'chat-fold:status' }).collapsed, 1);
   assert.equal(bubble.textContent, 'User input long');
@@ -446,12 +448,13 @@ test('user bulk actions and enabling are independent from answer folding', async
   assert.equal(userControls(app).length, 2);
 });
 
-test('changing line limits re-evaluates eligibility while preserving manual expansion choices', async t => {
+test('changing line limits keeps every drawer and preserves manual expansion choices', async t => {
   const app = await setup(t, userBubble('one', 2) + userBubble('two', 5), {}, false, mockUserLayout);
+  app.message({ type: 'chat-fold:v2:set-users', collapsed: true });
   userControls(app)[1].shadowRoot.querySelector('button').click();
   app.change({ userLines: { newValue: 3 } });
-  assert.equal(userControls(app).length, 1);
-  assert.equal(app.document.getElementById('one').hasAttribute('data-chat-fold-user-collapsed'), false);
+  assert.equal(userControls(app).length, 2);
+  assert.equal(app.document.getElementById('one').hasAttribute('data-chat-fold-user-collapsed'), true);
   assert.equal(app.document.getElementById('two').hasAttribute('data-chat-fold-user-collapsed'), false);
   app.change({ userLines: { newValue: 1 } });
   assert.equal(userControls(app).length, 2);
@@ -469,6 +472,7 @@ test('editing existing user text and replacing messages update user controls wit
   bubble.firstChild.data = 'Edited user input';
   await sleep(110);
   assert.equal(userControls(app).length, 1);
+  userControls(app)[0].shadowRoot.querySelector('button').click();
   userControls(app)[0].shadowRoot.querySelector('button').click();
   bubble.parentElement.outerHTML = userBubble('edited', 4);
   await sleep(110);
@@ -501,7 +505,7 @@ test('user detection excludes composers and inactive pages and supports older us
   const html = `<div data-app-shell-active-page="false">${userBubble('cached', 3)}</div><div contenteditable="true">${userBubble('draft', 3)}</div>` +
     '<div data-message-author-role="user"><div class="whitespace-pre-wrap" id="old">Legacy prompt</div></div>' + userBubble('active', 3);
   const app = await setup(t, html, {}, false, mockUserLayout);
-  assert.equal(userControls(app).length, 1);
+  assert.equal(userControls(app).length, 2);
   const adapter = app.window.ChatFold.resolve(app.window.location);
   assert.deepEqual([...adapter.findUserMessages(app.document)].map(message => message.element.id), ['old', 'active']);
 });

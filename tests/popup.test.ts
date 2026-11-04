@@ -150,7 +150,7 @@ test('user controls persist their independent toggle and positive integer line l
   const lines = app.document.getElementById('userLines');
   assert.equal(lines.value, '1');
   assert.equal(app.document.getElementById('expand-users').disabled, false);
-  assert.match(app.document.getElementById('user-status').textContent, /2 条长输入/);
+  assert.match(app.document.getElementById('user-status').textContent, /2 条用户输入/);
   lines.value = '3';
   lines.dispatchEvent(new app.window.Event('change'));
   await new Promise(resolve => setTimeout(resolve, 0));

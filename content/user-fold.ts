@@ -3,8 +3,9 @@
   const COLLAPSED = 'data-chat-fold-user-collapsed';
   const LINES = '--chatfolder-user-lines';
   const WIDTH = '--chatfolder-user-width';
+  const HEIGHT = '--chatfolder-user-height';
   interface UserRecord {
-    element: HTMLElement; key: string; width: number; eligible: boolean; collapsed: boolean;
+    element: HTMLElement; key: string; width: number; collapsed: boolean;
     parent: HTMLElement | null; parentWidth: number;
     host: HTMLDivElement; button: HTMLButtonElement;
     originalStyles: Map<string, { value: string; priority: string }>;
@@ -12,7 +13,7 @@
   }
   const css = `[${COLLAPSED}]{display:-webkit-box!important;-webkit-box-orient:vertical!important;
     -webkit-line-clamp:var(${LINES})!important;overflow:clip!important;overflow-clip-margin:content-box!important;
-    width:var(${WIDTH})!important;box-sizing:border-box!important}`;
+    width:var(${WIDTH})!important;max-height:var(${HEIGHT})!important;min-height:0!important;box-sizing:border-box!important}`;
   function create(adapter: ProviderAdapter, document: Document, schedule: () => void): UserFoldController {
     const records = new Map<HTMLElement, UserRecord>();
     const choices = new Map<string, boolean>();
@@ -37,9 +38,9 @@
       }
     }
     function paint(record: UserRecord): void {
-      record.element.toggleAttribute(COLLAPSED, record.eligible && record.collapsed);
+      record.element.toggleAttribute(COLLAPSED, record.collapsed);
       record.button.setAttribute('aria-expanded', String(!record.collapsed));
-      record.button.textContent = record.collapsed ? '···' : '收起';
+      record.button.textContent = record.collapsed ? '⌄' : '⌃';
       record.button.setAttribute('aria-label', record.collapsed ? '展开完整用户输入' : `收起用户输入，仅显示 ${settings.userLines} 行`);
       record.button.title = record.collapsed ? '显示完整输入' : `仅显示前 ${settings.userLines} 行`;
     }
@@ -48,19 +49,19 @@
       const host = owner.createElement('div');
       host.setAttribute('data-chat-fold-control', 'user');
       host.setAttribute('data-chat-fold-user-control', '');
-      host.style.cssText = 'max-width:100%;align-self:flex-end;flex-shrink:0;margin-inline-start:auto;margin-top:4px;';
+      host.style.cssText = 'max-width:100%;align-self:flex-end;flex-shrink:0;margin-inline-start:auto;margin-top:2px;';
       const shadow = host.attachShadow({ mode: 'open' });
       const style = owner.createElement('style');
       style.textContent = `:host{display:block;color:inherit}button{display:flex;align-items:center;justify-content:center;
-        width:100%;min-height:24px;box-sizing:border-box;border:1px solid color-mix(in srgb,currentColor 18%,transparent);
-        border-radius:6px;background:transparent;color:inherit;font:11px/1.4 "Segoe UI","Microsoft YaHei",sans-serif;
-        padding:3px 8px;min-width:0;white-space:nowrap;cursor:pointer;opacity:.8}button:hover{opacity:1;background:color-mix(in srgb,currentColor 6%,transparent)}
+        width:100%;height:18px;box-sizing:border-box;border:1px solid color-mix(in srgb,currentColor 12%,transparent);
+        border-radius:6px;background:transparent;color:inherit;font:14px/1 "Segoe UI","Microsoft YaHei",sans-serif;
+        padding:0 8px;min-width:0;white-space:nowrap;cursor:pointer;opacity:.8}button:hover{opacity:1;background:color-mix(in srgb,currentColor 6%,transparent)}
         button:focus-visible{outline:2px solid #4b83f5;outline-offset:2px}`;
       const button = owner.createElement('button'); button.type = 'button';
       shadow.append(style, button);
-      const record: UserRecord = { element, key, host, button, width: 0, eligible: false, collapsed: choices.get(key) ?? true, lastStyle: null,
+      const record: UserRecord = { element, key, host, button, width: 0, collapsed: choices.get(key) ?? false, lastStyle: null,
         parent: element.parentElement, parentWidth: 0,
-        originalStyles: new Map([LINES, WIDTH].map(name => [name, { value: element.style.getPropertyValue(name), priority: element.style.getPropertyPriority(name) }])) };
+        originalStyles: new Map([LINES, WIDTH, HEIGHT].map(name => [name, { value: element.style.getPropertyValue(name), priority: element.style.getPropertyPriority(name) }])) };
       button.addEventListener('click', () => { record.collapsed = !record.collapsed; choices.set(record.key, record.collapsed); paint(record); });
       resize?.observe(element);
       if (record.parent) resize?.observe(record.parent);
@@ -74,15 +75,20 @@
         if (record.parent) resize?.observe(record.parent);
       }
       record.parentWidth = record.parent?.getBoundingClientRect().width || 0;
-      // Compare actual full and line-clamped layouts, including soft wraps,
-      // explicit newlines, inline markup, font metrics and bubble padding.
+      // ChatGPT nests text inside several block/flex containers. Line clamp alone
+      // does not constrain that layout, so also cap the bubble using its text's
+      // rendered line height plus the original padding and borders.
       element.removeAttribute(COLLAPSED);
       const full = element.getBoundingClientRect(); record.width = full.width;
+      const text = element.querySelector<HTMLElement>('.whitespace-pre-wrap') || element;
+      const textStyle = element.ownerDocument.defaultView!.getComputedStyle(text);
+      const bubbleStyle = element.ownerDocument.defaultView!.getComputedStyle(element);
+      const lineHeight = parseFloat(textStyle.lineHeight) || parseFloat(textStyle.fontSize) * 1.2 || 24;
+      const inset = ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'] as const;
+      const height = lineHeight * settings.userLines + inset.reduce((sum, name) => sum + (parseFloat(bubbleStyle[name]) || 0), 0);
       element.style.setProperty(LINES, String(settings.userLines));
       element.style.setProperty(WIDTH, `${full.width}px`);
-      element.setAttribute(COLLAPSED, '');
-      record.eligible = full.width > 0 && full.height - element.getBoundingClientRect().height > 0.5;
-      if (!record.eligible) { restoreStyles(record); record.host.remove(); record.lastStyle = element.getAttribute('style'); return; }
+      element.style.setProperty(HEIGHT, `${height}px`);
       // Override the shared control's width:100% with the bubble border box.
       record.host.style.setProperty('width', `${full.width}px`, 'important');
       if (element.nextSibling !== record.host) element.after(record.host);
@@ -117,10 +123,10 @@
         }
       },
       status() {
-        const eligible = [...records.values()].filter(record => record.eligible);
-        return { enabled: settings.userEnabled, lines: settings.userLines, total: eligible.length, collapsed: eligible.filter(record => record.collapsed).length };
+        const messages = [...records.values()];
+        return { enabled: settings.userEnabled, lines: settings.userLines, total: messages.length, collapsed: messages.filter(record => record.collapsed).length };
       },
-      setAll(collapsed) { for (const record of records.values()) if (record.eligible) { record.collapsed = collapsed; choices.set(record.key, collapsed); paint(record); } },
+      setAll(collapsed) { for (const record of records.values()) { record.collapsed = collapsed; choices.set(record.key, collapsed); paint(record); } },
       contains(node) { return [...records.values()].some(record => record.element.contains(node)); },
       ignoreMutation(mutation) {
         const record = records.get(mutation.target as HTMLElement);
