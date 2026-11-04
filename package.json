@@ -1,6 +1,6 @@
 {
   "name": "chatfolder",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "private": true,
   "description": "A local-first Chrome extension that folds ChatGPT answers",
   "scripts": {

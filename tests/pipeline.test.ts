@@ -58,14 +58,6 @@ for (const initiallyInjected of [true, false]) {
     const { popup, root } = await pipeline(t, initiallyInjected);
     assert.match(popup.window.document.getElementById('status').textContent, /1 次回答 · 1 次已收起/);
     assert.ok(root.querySelector('[data-chat-fold-control]'));
-    popup.window.document.getElementById('diagnose').click();
-    await new Promise(resolve => setTimeout(resolve, 10));
-    const diagnostic = JSON.parse(popup.window.document.getElementById('diagnosticOutput').value);
-    assert.equal(diagnostic.extensionVersion, manifest.version);
-    assert.equal(diagnostic.engineError, null);
-    assert.equal(diagnostic.structure.articles, 0);
-    assert.equal(diagnostic.nested.contexts.find(context => context.kind === 'shadow').controls, 1);
-    assert.doesNotMatch(JSON.stringify(diagnostic), /Private question|Private answer|private-id/);
     popup.window.document.getElementById('expand').click();
     await new Promise(resolve => setTimeout(resolve, 10));
     assert.equal(root.querySelectorAll('[data-chat-fold-hidden]').length, 0);

@@ -1,6 +1,5 @@
 (() => {
 "use strict";
-interface DiagnosticError extends Error { code?: string; phase?: string }
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
   if (!node) throw new Error(`Missing popup element: ${id}`);
@@ -8,9 +7,6 @@ function element<T extends HTMLElement>(id: string): T {
 }
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
-}
-function asError(value: unknown): DiagnosticError {
-  return value instanceof Error ? value : new Error(String(value));
 }
 function requireTab(): number {
   if (tabId === undefined) throw new Error('No active ChatGPT tab');
@@ -37,40 +33,6 @@ async function request(action: string, data: Record<string, unknown> = {}): Prom
   } finally { clearTimeout(timeout); }
 }
 
-async function probe(): Promise<DiagnosticResponse> {
-  let phase = 'load-diagnostic-files';
-  try {
-    await chrome.scripting.executeScript({ target: { tabId: requireTab() }, files: ['build/content/dom.js', 'build/content/probe.js'] });
-    // Explicitly return a JSON value; do not rely on file-injection completion values.
-    phase = 'run-diagnostic-function';
-    const results = await chrome.scripting.executeScript({ target: { tabId: requireTab() }, func: () => {
-      try {
-        if (typeof globalThis.ChatFoldProbe !== 'function') return { error: 'PROBE_NOT_LOADED' };
-        return globalThis.ChatFoldProbe();
-      } catch (error) {
-        return { error: 'PROBE_RUNTIME_ERROR', exception: { name: error instanceof Error ? error.name : 'Error' } };
-      }
-    } });
-    const result: DiagnosticResponse | undefined = results?.find(entry => entry.frameId === 0)?.result ?? results?.[0]?.result;
-    if (!result || typeof result !== 'object') {
-      const error: DiagnosticError = new Error('诊断函数没有返回对象');
-      error.code = 'PROBE_EMPTY_RESULT';
-      throw error;
-    }
-    if (result.error) result.phase = phase;
-    return result;
-  } catch (error) { const failure = asError(error); failure.phase = phase; throw failure; }
-}
-
-function safeErrorMessage(error: unknown): string {
-  // Retain API/file/type errors, strip URLs, IDs and local filesystem locations.
-  return String(asError(error).message || 'Unknown error')
-    .replace(/(?:https?|file|chrome-extension):\/\/[^\s<>"']+/gi, '[URL]')
-    .replace(/[A-Z]:[\\/][^\r\n"']+/gi, '[local path]')
-    .replace(/\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/gi, '[ID]')
-    .slice(0, 500);
-}
-
 function validStatus(result: unknown): result is FoldStatus {
   return isRecord(result) && result.protocol === 2 && typeof result.version === 'string' &&
     typeof result.enabled === 'boolean' && Number.isInteger(result.total) && Number.isInteger(result.collapsed) &&
@@ -81,18 +43,13 @@ async function connect() {
   try {
     const result = await request('status');
     if (validStatus(result) && result.version === chrome.runtime.getManifest().version) return result;
-  } catch { /* Probe separately before attempting a safe, idempotent reinjection. */ }
-  const diagnostic = await probe();
-  if (diagnostic.error) throw new Error(`诊断执行异常（${diagnostic.error}），请读取诊断信息。`);
-  if (diagnostic.legacyScript || (diagnostic.pageVersion && diagnostic.pageVersion !== chrome.runtime.getManifest().version)) {
-    throw new Error('检测到旧版页面脚本。请点击「刷新页面并重连」，避免新旧脚本冲突。');
-  }
+  } catch { /* Reconnect by safely reinjecting the page engine. */ }
   await chrome.scripting.insertCSS({ target: { tabId: requireTab() }, files: ['content/content.css'] });
   await chrome.scripting.executeScript({ target: { tabId: requireTab() }, files: [
     'build/content/dom.js', 'build/content/registry.js', 'build/content/adapters/chatgpt.js', 'build/content/user-fold.js', 'build/content/engine.js'
   ] });
   const result = await request('status');
-  if (!validStatus(result)) throw new Error('页面脚本未正确启动，请读取兼容性诊断。');
+  if (!validStatus(result) || result.version !== chrome.runtime.getManifest().version) throw new Error('连接失败，请刷新 ChatGPT 页面后重试。');
   return result;
 }
 
@@ -100,20 +57,16 @@ async function refresh() {
   if (!tabId) return;
   try {
     const result = await connect();
-    element<HTMLElement>("provider").textContent = result.provider;
-    if (result.error) throw new Error(`页面脚本出错（${result.error.stage}/${result.error.name}），请读取兼容性诊断。`);
+    if (result.error) throw new Error('页面暂不可用，请刷新后重试。');
     error.hidden = true;
     status.textContent = !result.enabled ? "AI 回答折叠已暂停。" : result.total
-      ? `${result.total} 次回答 · ${result.collapsed} 次已收起` : "暂未识别到回答；如页面已有对话，请查看兼容性诊断。";
+      ? `${result.total} 次回答 · ${result.collapsed} 次已收起` : "暂无回答。";
     bulkButtons.forEach(button => { button.disabled = !result.enabled || !result.total; });
-    element<HTMLElement>('user-status').textContent = !result.users.enabled ? '用户输入折叠已暂停。' : result.users.total
-      ? `${result.users.total} 条用户输入 · ${result.users.collapsed} 条已收起` : '暂未识别到用户输入。';
     userButtons.forEach(button => { button.disabled = !result.users.enabled || !result.users.total; });
-  } catch (failure) {
-    status.textContent = asError(failure).message || "请刷新 ChatGPT 页面，让ChatFolder开始工作。";
+  } catch {
+    status.textContent = "连接失败，请刷新 ChatGPT 页面后重试。";
     bulkButtons.forEach(button => { button.disabled = true; });
     userButtons.forEach(button => { button.disabled = true; });
-    element<HTMLElement>('user-status').textContent = '连接页面后可管理长输入。';
   }
 }
 
@@ -150,7 +103,7 @@ async function init() {
     });
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.url || !/^https:\/\/(chatgpt\.com|chat\.openai\.com)\//.test(tab.url)) {
-      status.textContent = "在 ChatGPT 网页打开ChatFolder，即可管理回答。";
+      status.textContent = "请在 ChatGPT 页面使用。";
       return;
     }
     tabId = tab.id;
@@ -174,31 +127,6 @@ userButtons.forEach((button, index) => button.addEventListener('click', async ()
     await refresh();
   } catch { showError('输入折叠操作未完成，请刷新页面后重试。'); }
 }));
-element<HTMLButtonElement>("diagnose").addEventListener("click", async () => {
-  if (!tabId) { showError("请先打开 ChatGPT 会话页面。"); return; }
-  try {
-    const result = await probe();
-    const output = element<HTMLTextAreaElement>("diagnosticOutput");
-    output.value = JSON.stringify(result, null, 2);
-    output.hidden = false;
-  } catch (failure) {
-    // Even a failed probe produces copyable, valid JSON instead of the string undefined.
-    const output = element<HTMLTextAreaElement>('diagnosticOutput');
-    let engine = null;
-    try { engine = await request('diagnose'); } catch { /* Independent message fallback is best effort. */ }
-    output.value = JSON.stringify({ extensionVersion: chrome.runtime.getManifest().version,
-      error: asError(failure).code || 'PROBE_INJECTION_FAILED', phase: asError(failure).phase || 'unknown',
-      exception: { name: asError(failure).name || 'Error', message: safeErrorMessage(failure) },
-      engine: engine && typeof engine === 'object' ? engine : null }, null, 2);
-    output.hidden = false;
-    showError('诊断执行失败，请复制下方错误信息。');
-  }
-});
-element<HTMLButtonElement>('reload').addEventListener('click', async () => {
-  if (!tabId) { showError('请先打开 ChatGPT 页面。'); return; }
-  try { await chrome.tabs.reload(tabId); window.close(); }
-  catch { showError('刷新失败，请手动刷新 ChatGPT 页面。'); }
-});
 element<HTMLElement>('version').textContent = `v${chrome.runtime.getManifest().version}`;
 init();
 
