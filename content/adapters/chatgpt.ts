@@ -85,7 +85,7 @@
     elements.sort(ChatFoldDOM.compare);
     const legacy = elements.map(element => {
       const identified = element.matches('[data-message-id]') ? element : element.querySelector('[data-message-id]');
-      return { element, key: identified?.getAttribute('data-message-id') || element.id || element.getAttribute('data-testid') || null };
+      return { element, key: identified?.getAttribute('data-message-id') || element.id || null };
     });
     return [...modern, ...legacy].sort((a, b) => ChatFoldDOM.compare(a.element, b.element));
   }

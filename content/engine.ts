@@ -16,7 +16,9 @@
   const scopes = new Map<DOMScope, HTMLStyleElement>();
   const scopeIds = new WeakMap<Node, number>();
   let nextScopeId = 0;
-  const users = ChatFoldUsers.create(adapter, document, schedule);
+  const history = ChatFoldHistory.create(adapter.id);
+  let ready = false;
+  const users = ChatFoldUsers.create(adapter, document, schedule, history);
   const observationOptions = { subtree: true, childList: true, characterData: true, attributes: true,
     attributeFilter: ['data-message-author-role', 'data-turn', 'data-message-id', 'data-testid', 'style',
       'data-author-role', 'data-message-role', 'data-role', 'aria-label', 'class', 'src',
@@ -90,6 +92,7 @@
     record.button.addEventListener("click", () => {
       record.collapsed = !record.collapsed;
       choices.set(record.key, record.collapsed);
+      history.set(record.stateKey, record.collapsed);
       paint(record);
     });
     return record;
@@ -145,10 +148,10 @@
   function reconcile() {
     clearTimeout(timer);
     timer = undefined;
-    if (destroyed) return;
+    if (destroyed || !ready) return;
     if (route !== location.pathname) {
       route = location.pathname;
-      // Keep only this tab's live conversation state; never store answer text.
+      // Release old DOM; durable choices remain in local extension storage.
       choices.clear();
       users.reset();
       for (const record of records.values()) restore(record);
@@ -183,9 +186,11 @@
       }
       if (!record) {
         const key = stableKey || `${route}:anonymous-${++sequence}`;
-        record = createControl({ element: answer.element, targets: new Set(), key, index: index + 1, collapsed: choices.get(key) ?? settings.defaultCollapsed });
+        record = createControl({ element: answer.element, targets: new Set(), key, index: index + 1, stateKey: history.key('answer', answer.key), collapsed: history.get(history.key('answer', answer.key)) ?? choices.get(key) ?? settings.defaultCollapsed });
         records.set(answer.element, record);
       }
+      record.collapsed = history.get(record.stateKey) ?? record.collapsed;
+      history.remember(record.stateKey, record.collapsed);
       const targets = new Set(answer.elements || [answer.element]);
       for (const oldTarget of record.targets) {
         if (!targets.has(oldTarget)) oldTarget.removeAttribute('data-chat-fold-hidden');
@@ -223,6 +228,13 @@
   function onMessage(message: unknown, _sender: chrome.runtime.MessageSender, respond: (value: unknown) => void) {
     // Versioned names prevent an old content script from winning the response race.
     if (!message || typeof message !== 'object' || !('type' in message) || typeof message.type !== 'string') return;
+    if (!ready) {
+      void startup.then(() => {
+        if (ready && !destroyed) onMessage(message, _sender, respond);
+        else respond({ protocol: 2, version: runtime.version, error: { stage: 'startup', name: 'Unavailable' } });
+      });
+      return true; // Keep the Chrome message channel open until local state is loaded.
+    }
     const request = message as { type: string; collapsed?: unknown };
     const type = request.type.replace('chat-fold:v2:', 'chat-fold:');
     try {
@@ -243,6 +255,7 @@
       for (const record of records.values()) {
         record.collapsed = request.collapsed;
         choices.set(record.key, record.collapsed);
+        history.set(record.stateKey, record.collapsed);
         paint(record);
       }
       respond({ ok: true });
@@ -255,6 +268,7 @@
 
   function onStorageChange(changes: Record<string, chrome.storage.StorageChange>, area: string) {
     if (area !== "local") return;
+    history.update(changes);
     for (const name of (Object.keys(ChatFold.defaults) as (keyof FoldSettings)[])) {
       if (changes[name]) {
         const value: unknown = changes[name].newValue;
@@ -267,10 +281,12 @@
   chrome.storage.onChanged.addListener(onStorageChange);
 
   async function start() {
+    await history.load();
     try { settings = { ...settings, ...await chrome.storage.local.get(ChatFold.defaults) as Partial<FoldSettings> }; }
     catch { /* The extension remains useful with defaults if storage is unavailable. */ }
     if (!Number.isSafeInteger(settings.userLines) || settings.userLines < 1) settings.userLines = 1;
     if (destroyed) return;
+    ready = true;
     syncScopes(DOM.scan(document));
     safeReconcile();
     // Attaching a shadow root and iframe navigation do not necessarily mutate the parent DOM.
@@ -283,5 +299,5 @@
     addEventListener("pageshow", schedule);
     addEventListener('resize', schedule);
   }
-  start().catch(error => { failure = { stage: 'startup', name: DOM.errorName(error) }; });
+  const startup = start().catch(error => { failure = { stage: 'startup', name: DOM.errorName(error) }; });
 })();

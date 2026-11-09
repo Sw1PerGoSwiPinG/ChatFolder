@@ -31,7 +31,7 @@ lines. Its output is stored only in the ignored `artifacts/` directory.
 ## User input folding
 
 Every sent user input has a low-profile drawer button below the bubble,
-including short messages. Inputs start expanded; clicking the drawer collapses
+including short messages. Inputs without saved state start expanded; clicking the drawer collapses
 an input to at most the configured rendered line limit (default: 1). The popup
 has an independent toggle, a positive integer line limit and input bulk actions.
 Editable drafts and inactive cached pages are excluded.
@@ -52,3 +52,20 @@ synthetic prompts, never a real conversation. Evaluate the exported
 `runUserFoldingChecks` function from `tests/browser/user-folding-checks.mts`
 in the fixture page via Chrome DevTools MCP to check actual rendered geometry,
 resizing, content edits and style restoration.
+
+## Local fold history
+
+`content/history.ts` stores versioned, per-message boolean entries in
+`chrome.storage.local`. Keys contain provider, conversation ID, message kind and
+stable message ID. No text, titles or query parameters are stored. ChatGPT
+ordinary and project conversation URLs share the same `/c/:id` identity.
+
+The engine waits for hydration before rendering or handling popup commands.
+Initial states and individual/bulk changes are saved; stored states override
+defaults. Writes are serialized and grouped, with separate entries preventing
+unrelated messages in different tabs from overwriting each other. Storage change
+events update open tabs. Disabling folding restores the page without deleting
+history. Storage errors fall back to in-memory folding. Anonymous conversations
+and messages without stable IDs are not persisted; positional turn selectors
+are deliberately excluded. History stays in the Chrome profile and is removed
+when the extension is uninstalled.

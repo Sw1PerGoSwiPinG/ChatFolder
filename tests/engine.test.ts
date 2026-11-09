@@ -26,7 +26,7 @@ async function setup(t, html = user + answer('a'), settings = {}, trustedTypes =
       onChanged: { addListener(fn) { onChange = fn; }, removeListener(fn) { if (onChange === fn) onChange = null; } }
     }
   };
-  for (const file of ['build/content/dom.js', 'build/content/registry.js', 'build/content/adapters/chatgpt.js', 'build/content/user-fold.js', 'build/content/engine.js']) {
+  for (const file of ['build/content/dom.js', 'build/content/registry.js', 'build/content/adapters/chatgpt.js', 'build/content/history.js', 'build/content/user-fold.js', 'build/content/engine.js']) {
     window.eval(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'));
   }
   await sleep(10);
@@ -182,7 +182,7 @@ test('creates working buttons even when Trusted Types rejects HTML string inject
 test('reinjection tears down the previous engine and does not duplicate buttons', async t => {
   const app = await setup(t);
   const old = app.window.__chatFoldRuntime;
-  for (const file of ['build/content/dom.js', 'build/content/registry.js', 'build/content/adapters/chatgpt.js', 'build/content/user-fold.js', 'build/content/engine.js']) {
+  for (const file of ['build/content/dom.js', 'build/content/registry.js', 'build/content/adapters/chatgpt.js', 'build/content/history.js', 'build/content/user-fold.js', 'build/content/engine.js']) {
     app.window.eval(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'));
   }
   await sleep(10);

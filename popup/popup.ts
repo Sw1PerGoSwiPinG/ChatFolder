@@ -46,7 +46,7 @@ async function connect() {
   } catch { /* Reconnect by safely reinjecting the page engine. */ }
   await chrome.scripting.insertCSS({ target: { tabId: requireTab() }, files: ['content/content.css'] });
   await chrome.scripting.executeScript({ target: { tabId: requireTab() }, files: [
-    'build/content/dom.js', 'build/content/registry.js', 'build/content/adapters/chatgpt.js', 'build/content/user-fold.js', 'build/content/engine.js'
+    'build/content/dom.js', 'build/content/registry.js', 'build/content/adapters/chatgpt.js', 'build/content/history.js', 'build/content/user-fold.js', 'build/content/engine.js'
   ] });
   const result = await request('status');
   if (!validStatus(result) || result.version !== chrome.runtime.getManifest().version) throw new Error('连接失败，请刷新 ChatGPT 页面后重试。');

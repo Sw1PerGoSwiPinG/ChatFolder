@@ -71,7 +71,7 @@ interface UserFoldController {
 }
 interface UserFoldFactory {
   css: string;
-  create(adapter: ProviderAdapter, document: Document, schedule: () => void): UserFoldController;
+  create(adapter: ProviderAdapter, document: Document, schedule: () => void, history?: FoldHistory): UserFoldController;
 }
 
 interface AnswerState {
@@ -80,6 +80,7 @@ interface AnswerState {
   key: string;
   collapsed: boolean;
   index: number;
+  stateKey: string | null;
 }
 interface AnswerRecord extends AnswerState {
   host: HTMLDivElement;
@@ -123,3 +124,13 @@ declare var ChatFold: AdapterRegistry;
 declare var __chatFoldRuntime: FoldRuntime | undefined;
 declare var ChatFoldProbe: (() => DiagnosticResponse) | undefined;
 declare var ChatFoldUsers: UserFoldFactory;
+
+interface FoldHistory {
+  load(): Promise<void>;
+  key(kind: 'answer' | 'user', message: string | null): string | null;
+  get(key: string | null): boolean | undefined;
+  set(key: string | null, collapsed: boolean): void;
+  remember(key: string | null, collapsed: boolean): void;
+  update(changes: Record<string, chrome.storage.StorageChange>): boolean;
+}
+declare var ChatFoldHistory: { create(provider: string): FoldHistory };

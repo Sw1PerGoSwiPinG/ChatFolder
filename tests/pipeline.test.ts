@@ -27,9 +27,13 @@ async function pipeline(t, initiallyInjected) {
     tabs: {
       async query() { return [{ id: 1, url: page.window.location.href }]; },
       async sendMessage(id, message) {
-        let response;
-        for (const listener of listeners) listener(message, {}, value => { response = value; });
-        return response;
+        return await new Promise(resolve => {
+          let asynchronous = false;
+          for (const listener of listeners) {
+            if (listener(message, {}, resolve) === true) asynchronous = true;
+          }
+          if (!asynchronous && !listeners.size) resolve(undefined);
+        });
       }
     },
     scripting: {

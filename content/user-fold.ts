@@ -5,7 +5,7 @@
   const WIDTH = '--chatfolder-user-width';
   const HEIGHT = '--chatfolder-user-height';
   interface UserRecord {
-    element: HTMLElement; key: string; width: number; collapsed: boolean;
+    element: HTMLElement; key: string; stateKey: string | null; width: number; collapsed: boolean;
     parent: HTMLElement | null; parentWidth: number;
     host: HTMLDivElement; button: HTMLButtonElement;
     originalStyles: Map<string, { value: string; priority: string }>;
@@ -14,7 +14,7 @@
   const css = `[${COLLAPSED}]{display:-webkit-box!important;-webkit-box-orient:vertical!important;
     -webkit-line-clamp:var(${LINES})!important;overflow:clip!important;overflow-clip-margin:content-box!important;
     width:var(${WIDTH})!important;max-height:var(${HEIGHT})!important;min-height:0!important;box-sizing:border-box!important}`;
-  function create(adapter: ProviderAdapter, document: Document, schedule: () => void): UserFoldController {
+  function create(adapter: ProviderAdapter, document: Document, schedule: () => void, history?: FoldHistory): UserFoldController {
     const records = new Map<HTMLElement, UserRecord>();
     const choices = new Map<string, boolean>();
     const scopeIds = new WeakMap<Node, number>();
@@ -44,7 +44,7 @@
       record.button.setAttribute('aria-label', record.collapsed ? '展开完整用户输入' : `收起用户输入，仅显示 ${settings.userLines} 行`);
       record.button.title = record.collapsed ? '显示完整输入' : `仅显示前 ${settings.userLines} 行`;
     }
-    function add(element: HTMLElement, key: string): UserRecord {
+    function add(element: HTMLElement, key: string, stateKey: string | null): UserRecord {
       const owner = element.ownerDocument;
       const host = owner.createElement('div');
       host.setAttribute('data-chat-fold-control', 'user');
@@ -59,10 +59,10 @@
         button:focus-visible{outline:2px solid #4b83f5;outline-offset:2px}`;
       const button = owner.createElement('button'); button.type = 'button';
       shadow.append(style, button);
-      const record: UserRecord = { element, key, host, button, width: 0, collapsed: choices.get(key) ?? false, lastStyle: null,
+      const record: UserRecord = { element, key, stateKey, host, button, width: 0, collapsed: history?.get(stateKey) ?? choices.get(key) ?? false, lastStyle: null,
         parent: element.parentElement, parentWidth: 0,
         originalStyles: new Map([LINES, WIDTH, HEIGHT].map(name => [name, { value: element.style.getPropertyValue(name), priority: element.style.getPropertyPriority(name) }])) };
-      button.addEventListener('click', () => { record.collapsed = !record.collapsed; choices.set(record.key, record.collapsed); paint(record); });
+      button.addEventListener('click', () => { record.collapsed = !record.collapsed; choices.set(record.key, record.collapsed); history?.set(record.stateKey, record.collapsed); paint(record); });
       resize?.observe(element);
       if (record.parent) resize?.observe(record.parent);
       return record;
@@ -113,7 +113,9 @@
           let record = records.get(message.element);
           const stableKey = message.key ? `${scopeIds.get(scope)}:${message.key}` : null;
           if (record && stableKey && record.key !== stableKey) { remove(record); records.delete(message.element); record = undefined; }
-          if (!record) { record = add(message.element, stableKey || `anonymous-${++sequence}`); records.set(message.element, record); }
+          if (!record) { record = add(message.element, stableKey || `anonymous-${++sequence}`, history?.key('user', message.key) ?? null); records.set(message.element, record); }
+          record.collapsed = history?.get(record.stateKey) ?? record.collapsed;
+          history?.remember(record.stateKey, record.collapsed);
           measure(record);
           const fonts = message.element.ownerDocument.fonts;
           if (fonts && !fontSets.has(fonts)) {
@@ -126,7 +128,7 @@
         const messages = [...records.values()];
         return { enabled: settings.userEnabled, lines: settings.userLines, total: messages.length, collapsed: messages.filter(record => record.collapsed).length };
       },
-      setAll(collapsed) { for (const record of records.values()) { record.collapsed = collapsed; choices.set(record.key, collapsed); paint(record); } },
+      setAll(collapsed) { for (const record of records.values()) { record.collapsed = collapsed; choices.set(record.key, collapsed); history?.set(record.stateKey, collapsed); paint(record); } },
       contains(node) { return [...records.values()].some(record => record.element.contains(node)); },
       ignoreMutation(mutation) {
         const record = records.get(mutation.target as HTMLElement);
