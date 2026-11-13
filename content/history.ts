@@ -1,9 +1,10 @@
 (() => {
   'use strict';
   const PREFIX = 'chatfolder:state:v1:';
+  const accepted = (key: string) => key.startsWith(PREFIX) || key.startsWith('chatfolder:index:v1:') || key.startsWith('chatfolder:catalog:v1:');
   function create(provider: string): FoldHistory {
-    const values = new Map<string, boolean>();
-    const pending = new Map<string, boolean>();
+    const values = new Map<string, unknown>();
+    const pending = new Map<string, unknown>();
     const dirty = new Set<string>();
     let writing = false;
     let loaded = false;
@@ -26,21 +27,31 @@
           const stored = await chrome.storage.local.get(null);
           loaded = true;
           for (const [key, value] of Object.entries(stored)) {
-            if (key.startsWith(PREFIX) && typeof value === 'boolean' && !dirty.has(key)) values.set(key, value);
+            if (accepted(key) && !dirty.has(key)) values.set(key, value);
           }
         } catch { /* Folding remains available without storage. */ }
       },
       key(kind, message) {
         const conversation = location.pathname.match(/\/c\/([^/]+)/)?.[1];
-        if (!conversation || !message) return null;
+        if (!message) return null;
+        if (!conversation) return 'chatfolder:volatile:' + JSON.stringify([provider, location.pathname, kind, message]);
         // One storage entry per message avoids overwriting another tab's messages.
         // IDs and booleans only: no message bodies, titles or query parameters.
         return PREFIX + JSON.stringify([provider, conversation, kind, message]);
       },
-      get(key) { return key ? values.get(key) : undefined; },
+      get(key) { const value = key ? values.get(key) : undefined; return typeof value === 'boolean' ? value : undefined; },
+      entries() { return [...values.entries()]; },
+      read(key) { return values.get(key); },
+      write(key, value) {
+        if (JSON.stringify(values.get(key)) === JSON.stringify(value)) return;
+        values.set(key, value);
+        if (!loaded) return;
+        pending.set(key, value); dirty.add(key); void flush();
+      },
       set(key, collapsed) {
         if (!key || values.get(key) === collapsed) return;
         values.set(key, collapsed);
+        if (key.startsWith('chatfolder:volatile:')) return;
         pending.set(key, collapsed);
         dirty.add(key);
         void flush();
@@ -52,8 +63,8 @@
       update(changes) {
         let changed = false;
         for (const [key, change] of Object.entries(changes)) {
-          if (!key.startsWith(PREFIX) || dirty.has(key)) continue;
-          if (typeof change.newValue === 'boolean') values.set(key, change.newValue);
+          if (!accepted(key) || dirty.has(key)) continue;
+          if (change.newValue !== undefined) values.set(key, change.newValue);
           else values.delete(key);
           changed = true;
         }

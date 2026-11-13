@@ -12,7 +12,7 @@
     </section>
     <section class="conversation" aria-label="AI 回答折叠">
       <label class="setting"><strong>折叠 AI 回答</strong><input id="enabled" type="checkbox" role="switch"><span class="switch" aria-hidden="true"></span></label>
-      <p id="status" role="status" aria-live="polite">正在连接页面…</p>
+      <div class="index-status"><p id="status" role="status" aria-live="polite">正在连接页面…</p><button id="verify" type="button" disabled title="临时滚动检查完整会话；滚动或按 Esc 可中止">校验会话</button></div>
       <div class="actions"><button id="collapse" type="button" disabled>全部收起</button><button id="expand" type="button" disabled>全部展开</button></div>
     </section>
     <section class="user-folding" aria-label="用户输入折叠">

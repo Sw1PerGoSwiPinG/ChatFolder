@@ -25,7 +25,7 @@ async function setup(t, url, connected = true, options = {}) {
         }
         messages.push(message);
         if (message.type === 'chat-fold:v2:set-all' || message.type === 'chat-fold:v2:set-users') return { ok: true };
-        return { protocol: 2, version: options.pageVersion || '1.0.5', provider: 'ChatGPT', total: 3, collapsed: 2, enabled: true, users: {enabled: true, lines: 1, total: 2, collapsed: 2} };
+        return { protocol: 2, version: options.pageVersion || '1.0.5', provider: 'ChatGPT', index: options.index, total: 3, collapsed: 2, enabled: true, users: {enabled: true, lines: 1, total: 2, collapsed: 2} };
       }
     },
     scripting: {
@@ -121,4 +121,27 @@ test('user controls persist their independent toggle and positive integer line l
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.equal(app.saved.at(-1).userEnabled, false);
   assert.equal(lines.disabled, true);
+});
+
+
+test('partial indexes label known-message scope and verified indexes label all-message scope', async t => {
+  const partial=await setup(t,'https://chatgpt.com/',true,{index:{complete:false,verifiedAt:null,verifying:false}});
+  assert.match(partial.document.getElementById('status').textContent,/已识别 3/);
+  assert.equal(partial.document.getElementById('collapse').textContent,'收起已识别');
+  assert.equal(partial.document.getElementById('collapse-users').textContent,'收起已识别');
+  const verified=await setup(t,'https://chatgpt.com/',true,{index:{complete:true,verifiedAt:Date.now(),verifying:false}});
+  assert.match(verified.document.getElementById('status').textContent,/共 3/);
+  assert.equal(verified.document.getElementById('collapse').textContent,'全部收起');
+  verified.document.getElementById('verify').click();await new Promise(resolve=>setTimeout(resolve,0));
+  assert.ok(verified.messages.some(m=>m.type==='chat-fold:v2:verify'));
+});
+
+test('verification shows progress, disables bulk changes and can be cancelled', async t => {
+  const app=await setup(t,'https://chatgpt.com/',true,{index:{complete:false,verifiedAt:null,verifying:true}});
+  assert.match(app.document.getElementById('status').textContent,/正在校验/);
+  assert.equal(app.document.getElementById('collapse').disabled,true);
+  assert.equal(app.document.getElementById('expand-users').disabled,true);
+  assert.equal(app.document.getElementById('verify').textContent,'取消');
+  app.document.getElementById('verify').click();await new Promise(resolve=>setTimeout(resolve,0));
+  assert.ok(app.messages.some(m=>m.type==='chat-fold:v2:cancel-verify'));
 });

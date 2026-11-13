@@ -17,7 +17,10 @@
   const scopeIds = new WeakMap<Node, number>();
   let nextScopeId = 0;
   const history = ChatFoldHistory.create(adapter.id);
+  const catalog = ChatFoldCatalog.create(history, adapter.id);
   let ready = false;
+  let verification: AbortController | null = null;
+  let verificationResult: string | null = null;
   const users = ChatFoldUsers.create(adapter, document, schedule, history);
   const observationOptions = { subtree: true, childList: true, characterData: true, attributes: true,
     attributeFilter: ['data-message-author-role', 'data-turn', 'data-message-id', 'data-testid', 'style',
@@ -35,6 +38,7 @@
     get error() { return failure; },
     destroy() {
       destroyed = true;
+      verification?.abort();
       clearTimeout(timer);
       clearInterval(interval);
       observer.disconnect();
@@ -105,7 +109,7 @@
     }
     record.button.setAttribute("aria-expanded", String(!record.collapsed));
     record.label.textContent = record.collapsed ? "展开回答" : "收起回答";
-    record.number.textContent = String(record.index).padStart(2, "0");
+    record.number.textContent = `${catalog.status().complete ? "" : "~"}${String(record.index).padStart(2, "0")}`;
     record.button.setAttribute("aria-label", `${record.collapsed ? "展开" : "收起"}第 ${record.index} 次 AI 回答`);
   }
 
@@ -148,7 +152,7 @@
   function reconcile() {
     clearTimeout(timer);
     timer = undefined;
-    if (destroyed || !ready) return;
+    if (destroyed || !ready || verification) return;
     if (route !== location.pathname) {
       route = location.pathname;
       // Release old DOM; durable choices remain in local extension storage.
@@ -159,13 +163,18 @@
     }
     const discovery = DOM.scan(document);
     syncScopes(discovery);
+    const answers = adapter.findAnswers(document, discovery);
+    const inputs = adapter.findUserMessages?.(document, discovery) || [];
+    catalog.observe('answer', answers.flatMap(a => a.key ? [a.key] : []));
+    catalog.observe('user', inputs.flatMap(a => a.key ? [a.key] : []));
+    for (const answer of answers) history.remember(history.key('answer', answer.key), history.get(history.key('answer', answer.key)) ?? settings.defaultCollapsed);
+    for (const input of inputs) history.remember(history.key('user', input.key), history.get(history.key('user', input.key)) ?? false);
     users.reconcile(settings, discovery);
     if (!settings.enabled) {
       for (const record of records.values()) restore(record);
       records.clear();
       return;
     }
-    const answers = adapter.findAnswers(document, discovery);
     const live = new Set(answers.map(answer => answer.element));
     for (const [element, record] of records) {
       if (!live.has(element)) {
@@ -196,7 +205,7 @@
         if (!targets.has(oldTarget)) oldTarget.removeAttribute('data-chat-fold-hidden');
       }
       record.targets = targets;
-      record.index = index + 1;
+      record.index = answer.key ? catalog.ids('answer').indexOf(answer.key) + 1 : index + 1;
       if (record.host.nextSibling !== answer.element) answer.element.before(record.host);
       paint(record);
     });
@@ -219,11 +228,21 @@
       if (mutation.target.nodeType === 1 && (mutation.target as Element).closest(`${CONTROLS}, [data-chat-fold-style]`)) return false;
       if (users.ignoreMutation(mutation)) return false;
       if (mutation.type === 'characterData' || users.contains(mutation.target)) return users.contains(mutation.target);
-      if (mutation.type === "attributes") return true;
+      if (mutation.type === "attributes") return mutation.attributeName !== "style" || users.affectsLayout(mutation.target);
       return [...mutation.addedNodes, ...mutation.removedNodes].some(node =>
         node.nodeType === 1 && !(node as Element).matches(`${CONTROLS}, [data-chat-fold-style]`));
     })) schedule();
   });
+
+  function answerStatus() {
+    const state = catalog.count('answer', settings.defaultCollapsed);
+    const anonymous = [...records.values()].filter(r=>r.key.includes(':anonymous-'));
+    return { total: state.total + anonymous.length, collapsed: state.collapsed + anonymous.filter(r=>r.collapsed).length };
+  }
+  function userStatus() {
+    const mounted = users.status(), state = catalog.count('user', false);
+    return { ...mounted, total: state.total + (mounted.anonymousTotal || 0), collapsed: state.collapsed + (mounted.anonymousCollapsed || 0) };
+  }
 
   function onMessage(message: unknown, _sender: chrome.runtime.MessageSender, respond: (value: unknown) => void) {
     // Versioned names prevent an old content script from winning the response race.
@@ -238,20 +257,52 @@
     const request = message as { type: string; collapsed?: unknown };
     const type = request.type.replace('chat-fold:v2:', 'chat-fold:');
     try {
-    if (type === "chat-fold:diagnose") {
+    if (verification && ['chat-fold:set-all', 'chat-fold:set-users'].includes(type)) { respond({ ok: false }); return; }
+    if (type === 'chat-fold:verify') {
+      if (!verification) {
+        const controller = verification = new AbortController();
+        const verificationRoute = location.pathname;
+        verificationResult = null;
+        // Expand existing targets without changing any saved choices, then let the
+        // website stabilize its virtual heights before collecting the directory.
+        for (const record of records.values()) restore(record);
+        records.clear(); users.reset();
+        void (async () => {
+          try {
+            const result = await ChatFoldVerify.run(adapter, controller.signal, (a,u) => {
+              if (location.pathname === verificationRoute) { catalog.observe('answer', a); catalog.observe('user', u); }
+            });
+            if (destroyed || location.pathname !== verificationRoute) return;
+            if (result.complete) {
+              catalog.confirm(result.answers, result.users);
+              for (const id of result.answers) history.remember(history.key('answer', id), history.get(history.key('answer', id)) ?? settings.defaultCollapsed);
+              for (const id of result.users) history.remember(history.key('user', id), history.get(history.key('user', id)) ?? false);
+              verificationResult = 'complete';
+            }
+            else { catalog.invalidate(); verificationResult = 'partial'; }
+          } catch { verificationResult = 'partial'; }
+          finally { verification = null; if (!destroyed) safeReconcile(); }
+        })();
+      }
+      respond({ ok: true });
+    } else if (type === 'chat-fold:cancel-verify') {
+      verification?.abort(); respond({ ok: true });
+    } else if (type === "chat-fold:diagnose") {
       respond({ version: runtime.version, protocol: runtime.protocol, provider: adapter.id,
         enabled: settings.enabled, structure: adapter.diagnose?.(document) ?? null });
     } else if (type === "chat-fold:status") {
       safeReconcile();
       respond({ version: runtime.version, protocol: runtime.protocol, error: failure,
-        provider: adapter.label, enabled: settings.enabled, total: records.size,
-        collapsed: [...records.values()].filter(record => record.collapsed).length, users: users.status() });
+        provider: adapter.label, enabled: settings.enabled,
+        ...answerStatus(), users: userStatus(), index: { ...catalog.status(), verifying: !!verification, result: verificationResult } });
     } else if (type === 'chat-fold:set-users' && typeof request.collapsed === 'boolean') {
       reconcile();
+      catalog.setAll('user', request.collapsed);
       users.setAll(request.collapsed);
       respond({ ok: true });
     } else if (type === "chat-fold:set-all" && typeof request.collapsed === "boolean") {
       reconcile();
+      catalog.setAll('answer', request.collapsed);
       for (const record of records.values()) {
         record.collapsed = request.collapsed;
         choices.set(record.key, record.collapsed);
@@ -268,20 +319,25 @@
 
   function onStorageChange(changes: Record<string, chrome.storage.StorageChange>, area: string) {
     if (area !== "local") return;
-    history.update(changes);
+    const changed = history.update(changes);
+    if (changed) catalog.refresh();
+    let settingsChanged = false;
     for (const name of (Object.keys(ChatFold.defaults) as (keyof FoldSettings)[])) {
       if (changes[name]) {
+        settingsChanged = true;
         const value: unknown = changes[name].newValue;
         if (name === 'userLines') settings.userLines = typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 ? value : 1;
         else settings[name] = typeof value === 'boolean' ? value : ChatFold.defaults[name];
       }
     }
-    safeReconcile();
+    if (settingsChanged) safeReconcile();
+    else if (changed) schedule();
   }
   chrome.storage.onChanged.addListener(onStorageChange);
 
   async function start() {
     await history.load();
+    catalog.refresh();
     try { settings = { ...settings, ...await chrome.storage.local.get(ChatFold.defaults) as Partial<FoldSettings> }; }
     catch { /* The extension remains useful with defaults if storage is unavailable. */ }
     if (!Number.isSafeInteger(settings.userLines) || settings.userLines < 1) settings.userLines = 1;
@@ -294,7 +350,7 @@
       const discovery = DOM.scan(document);
       if (route !== location.pathname || discovery.roots.length !== scopes.size ||
         discovery.roots.some(({ root }) => !scopes.has(root))) schedule();
-    }, 750);
+    }, 2000);
     addEventListener("popstate", schedule);
     addEventListener("pageshow", schedule);
     addEventListener('resize', schedule);

@@ -126,9 +126,10 @@
       },
       status() {
         const messages = [...records.values()];
-        return { enabled: settings.userEnabled, lines: settings.userLines, total: messages.length, collapsed: messages.filter(record => record.collapsed).length };
+        return { enabled: settings.userEnabled, lines: settings.userLines, total: messages.length, collapsed: messages.filter(record => record.collapsed).length, anonymousTotal: messages.filter(r=>r.key.startsWith('anonymous-')).length, anonymousCollapsed: messages.filter(r=>r.key.startsWith('anonymous-') && r.collapsed).length };
       },
       setAll(collapsed) { for (const record of records.values()) { record.collapsed = collapsed; choices.set(record.key, collapsed); history?.set(record.stateKey, collapsed); paint(record); } },
+      affectsLayout(node) { return [...records.values()].some(record => record.parent === node); },
       contains(node) { return [...records.values()].some(record => record.element.contains(node)); },
       ignoreMutation(mutation) {
         const record = records.get(mutation.target as HTMLElement);

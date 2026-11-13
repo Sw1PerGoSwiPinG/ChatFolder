@@ -26,7 +26,7 @@ async function setup(t, html = user + answer('a'), settings = {}, trustedTypes =
       onChanged: { addListener(fn) { onChange = fn; }, removeListener(fn) { if (onChange === fn) onChange = null; } }
     }
   };
-  for (const file of ['build/content/dom.js', 'build/content/registry.js', 'build/content/adapters/chatgpt.js', 'build/content/history.js', 'build/content/user-fold.js', 'build/content/engine.js']) {
+  for (const file of ['build/content/dom.js', 'build/content/registry.js', 'build/content/adapters/chatgpt.js', 'build/content/history.js', 'build/content/catalog.js', 'build/content/verify.js', 'build/content/user-fold.js', 'build/content/engine.js']) {
     window.eval(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'));
   }
   await sleep(10);
@@ -182,7 +182,7 @@ test('creates working buttons even when Trusted Types rejects HTML string inject
 test('reinjection tears down the previous engine and does not duplicate buttons', async t => {
   const app = await setup(t);
   const old = app.window.__chatFoldRuntime;
-  for (const file of ['build/content/dom.js', 'build/content/registry.js', 'build/content/adapters/chatgpt.js', 'build/content/history.js', 'build/content/user-fold.js', 'build/content/engine.js']) {
+  for (const file of ['build/content/dom.js', 'build/content/registry.js', 'build/content/adapters/chatgpt.js', 'build/content/history.js', 'build/content/catalog.js', 'build/content/verify.js', 'build/content/user-fold.js', 'build/content/engine.js']) {
     app.window.eval(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'));
   }
   await sleep(10);
@@ -265,7 +265,7 @@ test('finds frame answers and later streams, including shadows inside a same-ori
   assert.equal(app.message({ type: 'chat-fold:v2:status' }).total, 3);
   app.document.querySelector('#frame').remove();
   await sleep(110);
-  assert.equal(app.message({ type: 'chat-fold:v2:status' }).total, 0);
+  assert.equal(app.message({ type: 'chat-fold:v2:status' }).total, 3);
   assert.equal(frameDocument.querySelectorAll('[data-chat-fold-hidden]').length, 0);
 });
 
@@ -286,7 +286,7 @@ test('polling discovers attachShadow on an existing host with no parent DOM muta
   const app = await setup(t, '<div id="late"></div>');
   const root = app.document.querySelector('#late').attachShadow({ mode: 'open' });
   root.innerHTML = answer('late');
-  await sleep(950);
+  await sleep(2200);
   assert.ok(root.querySelector('[data-chat-fold-control]'));
 });
 
@@ -508,4 +508,16 @@ test('user detection excludes composers and inactive pages and supports older us
   assert.equal(userControls(app).length, 2);
   const adapter = app.window.ChatFold.resolve(app.window.location);
   assert.deepEqual([...adapter.findUserMessages(app.document)].map(message => message.element.id), ['old', 'active']);
+});
+
+
+test('parent width changes keep user drawer aligned even before ResizeObserver delivery', async t => {
+  const app = await setup(t, userBubble('parent-resize', 3), {}, false, window => {
+    mockUserLayout(window); window.ResizeObserver = undefined;
+  });
+  const bubble = app.document.getElementById('parent-resize');
+  bubble.setAttribute('data-rendered-width', '240');
+  bubble.parentElement.style.width = '240px';
+  await sleep(110);
+  assert.equal(userControls(app)[0].style.getPropertyValue('width'), '240px');
 });

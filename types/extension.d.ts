@@ -57,14 +57,16 @@ interface FoldStatus {
   total: number;
   collapsed: number;
   users: UserFoldStatus;
+  index?: CatalogStatus;
 }
 
-interface UserFoldStatus { enabled: boolean; lines: number; total: number; collapsed: number }
+interface UserFoldStatus { enabled: boolean; lines: number; total: number; collapsed: number; anonymousTotal?: number; anonymousCollapsed?: number; }
 interface UserFoldController {
   reconcile(settings: FoldSettings, discovery: DOMDiscovery): void;
   status(): UserFoldStatus;
   setAll(collapsed: boolean): void;
   contains(node: Node): boolean;
+  affectsLayout(node: Node): boolean;
   ignoreMutation(mutation: MutationRecord): boolean;
   reset(): void;
   destroy(): void;
@@ -127,6 +129,9 @@ declare var ChatFoldUsers: UserFoldFactory;
 
 interface FoldHistory {
   load(): Promise<void>;
+  entries(): [string, unknown][];
+  read(key: string): unknown;
+  write(key: string, value: unknown): void;
   key(kind: 'answer' | 'user', message: string | null): string | null;
   get(key: string | null): boolean | undefined;
   set(key: string | null, collapsed: boolean): void;
@@ -134,3 +139,20 @@ interface FoldHistory {
   update(changes: Record<string, chrome.storage.StorageChange>): boolean;
 }
 declare var ChatFoldHistory: { create(provider: string): FoldHistory };
+
+type MessageKind = 'answer' | 'user';
+interface CatalogStatus { complete: boolean; verifiedAt: number | null; verifying: boolean; result?: string | null; }
+interface ConversationCatalog {
+  observe(kind: MessageKind, ids: string[]): void;
+  ids(kind: MessageKind): string[];
+  count(kind: MessageKind, fallback: boolean): { total: number; collapsed: number };
+  setAll(kind: MessageKind, collapsed: boolean): void;
+  confirm(answers: string[], users: string[]): void;
+  invalidate(): void;
+  status(): CatalogStatus;
+  refresh(): void;
+}
+declare var ChatFoldCatalog: { create(history: FoldHistory, provider: string): ConversationCatalog };
+
+interface VerificationResult { answers: string[]; users: string[]; complete: boolean; }
+declare var ChatFoldVerify: { run(adapter: ProviderAdapter, signal: AbortSignal, collect: (answers: string[], users: string[]) => void): Promise<VerificationResult> };

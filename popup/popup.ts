@@ -20,6 +20,10 @@ const bulkButtons = [element<HTMLButtonElement>("collapse"), element<HTMLButtonE
 const userButtons = [element<HTMLButtonElement>('collapse-users'), element<HTMLButtonElement>('expand-users')];
 const userLines = element<HTMLInputElement>('userLines');
 let savedUserLines = defaults.userLines;
+const verify = element<HTMLButtonElement>('verify');
+let poll: number | undefined;
+let verifying = false;
+window.addEventListener('pagehide', () => clearTimeout(poll));
 
 function showError(message: string): void { error.textContent = message; error.hidden = false; }
 
@@ -46,7 +50,7 @@ async function connect() {
   } catch { /* Reconnect by safely reinjecting the page engine. */ }
   await chrome.scripting.insertCSS({ target: { tabId: requireTab() }, files: ['content/content.css'] });
   await chrome.scripting.executeScript({ target: { tabId: requireTab() }, files: [
-    'build/content/dom.js', 'build/content/registry.js', 'build/content/adapters/chatgpt.js', 'build/content/history.js', 'build/content/user-fold.js', 'build/content/engine.js'
+    'build/content/dom.js', 'build/content/registry.js', 'build/content/adapters/chatgpt.js', 'build/content/history.js', 'build/content/catalog.js', 'build/content/verify.js', 'build/content/user-fold.js', 'build/content/engine.js'
   ] });
   const result = await request('status');
   if (!validStatus(result) || result.version !== chrome.runtime.getManifest().version) throw new Error('连接失败，请刷新 ChatGPT 页面后重试。');
@@ -59,11 +63,22 @@ async function refresh() {
     const result = await connect();
     if (result.error) throw new Error('页面暂不可用，请刷新后重试。');
     error.hidden = true;
-    status.textContent = !result.enabled ? "AI 回答折叠已暂停。" : result.total
-      ? `${result.total} 次回答 · ${result.collapsed} 次已收起` : "暂无回答。";
-    bulkButtons.forEach(button => { button.disabled = !result.enabled || !result.total; });
-    userButtons.forEach(button => { button.disabled = !result.users.enabled || !result.users.total; });
+    verifying = result.index?.verifying === true;
+    const complete = result.index?.complete === true;
+    const prefix = complete ? '共' : result.index?.verifiedAt ? '缓存' : '已识别';
+    status.textContent = verifying ? '正在校验，滚动可中止…' : !result.enabled ? 'AI 回答折叠已暂停。' : result.total
+      ? `${prefix} ${result.total} 次回答 · ${result.collapsed} 次已收起` : '尚未识别到回答。';
+    status.title = complete ? `上次完整校验：${new Date(result.index!.verifiedAt!).toLocaleTimeString()}` : '当前数量可能不完整或来自缓存，校验会话可更新数量与顺序。';
+    verify.disabled = false; verify.textContent = verifying ? '取消' : '校验会话';
+    const partialLabels = ['收起已识别', '展开已识别'];
+    [...bulkButtons, ...userButtons].forEach((button, i) => { button.textContent = complete ? (i % 2 === 0 ? '全部收起' : '全部展开') : partialLabels[i % 2]; });
+    bulkButtons.forEach(button => { button.disabled = verifying || !result.enabled || !result.total; });
+    userButtons.forEach(button => { button.disabled = verifying || !result.users.enabled || !result.users.total; });
+    clearTimeout(poll);
+    if (verifying) poll = setTimeout(() => { void refresh(); }, 500);
+
   } catch {
+    verify.disabled = true;
     status.textContent = "连接失败，请刷新 ChatGPT 页面后重试。";
     bulkButtons.forEach(button => { button.disabled = true; });
     userButtons.forEach(button => { button.disabled = true; });
@@ -127,6 +142,11 @@ userButtons.forEach((button, index) => button.addEventListener('click', async ()
     await refresh();
   } catch { showError('输入折叠操作未完成，请刷新页面后重试。'); }
 }));
+verify.addEventListener('click', async () => {
+  verify.disabled = true;
+  try { await request(verifying ? 'cancel-verify' : 'verify'); await refresh(); }
+  catch { showError('校验未完成，请重试。'); verify.disabled = false; }
+});
 element<HTMLElement>('version').textContent = `v${chrome.runtime.getManifest().version}`;
 init();
 

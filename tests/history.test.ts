@@ -63,7 +63,7 @@ test('answer and input choices restore after reload; saved choices override new 
   assert.equal(b.answerButton().getAttribute('aria-expanded'), 'true');
   const payload = JSON.stringify(store.writes);
   assert.doesNotMatch(payload, /Private input|Private answer|https:|query|title/);
-  assert.ok(Object.values(store.data).every(value => typeof value === 'boolean'));
+  assert.ok(Object.entries(store.data).filter(([key]) => key.startsWith(PREFIX)).every(([,value]) => typeof value === 'boolean'));
 });
 
 test('SPA navigation isolates conversations and restores previous choices on return', async t => {
@@ -104,7 +104,7 @@ test('different tabs update independent entries without losing choices and refle
   const c = await page(t, store, '/c/first', markup() + markup('other'));
   let status = await c.message('status'); assert.equal(status.collapsed, 1); assert.equal(status.users.collapsed, 1);
   await store.local.set({ [stateKey('answer')]: true });
-  status = await a.message('status'); assert.equal(status.collapsed, 1);
+  status = await a.message('status'); assert.equal(status.collapsed, 2);
 });
 
 test('rapid toggles keep the last choice even while previous writes are in flight', async t => {
@@ -147,4 +147,95 @@ test('a failed hydration does not overwrite unknown saved states with defaults',
   assert.equal(store.writes.length, 0);
   assert.equal(store.data[stateKey('answer')], false);
   assert.equal(store.data[stateKey('user')], true);
+});
+
+
+test('virtualized six-turn conversation keeps count, states and numbering across unmount and reload', async t => {
+  const store = storage(); const a = await page(t, store, '/c/first', markup('1') + markup('2'));
+  for (const ids of [['3','4'],['5','6'],['1','2'],['5','6']]) {
+    a.w.document.querySelector('main').innerHTML = ids.map(id=>markup(id)).join('');
+    await a.message('status');
+  }
+  let status = await a.message('status');
+  assert.equal(status.total, 6); assert.equal(status.users.total, 6); assert.equal(status.index.complete, false);
+  assert.equal(a.w.document.querySelectorAll('[data-chat-fold-control]:not([data-chat-fold-user-control])').length, 2);
+  assert.equal(a.answerButton().querySelector('.number').textContent, '~05');
+  await wait(); a.close();
+  const b = await page(t, store, '/c/first', markup('5') + markup('6'));
+  status = await b.message('status'); assert.equal(status.total, 6); assert.equal(status.collapsed, 6);
+});
+
+test('bulk actions affect indexed offscreen answers and inputs, while new messages use defaults', async t => {
+  const store = storage(); const a = await page(t, store, '/c/first', markup('1') + markup('2'));
+  a.w.document.querySelector('main').innerHTML = markup('3') + markup('4'); await a.message('status');
+  await a.message('set-all', { collapsed: false }); await a.message('set-users', { collapsed: true });
+  a.w.document.querySelector('main').innerHTML = markup('1') + markup('2');
+  let status = await a.message('status'); assert.equal(status.collapsed, 0); assert.equal(status.users.collapsed, 4);
+  assert.equal(a.answerButton().getAttribute('aria-expanded'), 'true'); assert.equal(a.userButton().getAttribute('aria-expanded'), 'false');
+  a.w.document.querySelector('main').insertAdjacentHTML('beforeend', markup('5'));
+  status = await a.message('status'); assert.equal(status.total, 5); assert.equal(status.collapsed, 1); assert.equal(status.users.collapsed, 4);
+});
+
+test('repeated mounts do not increase counts or repeatedly write unchanged index entries', async t => {
+  const store = storage(); const a = await page(t, store);
+  await wait(); const writes = store.writes.length;
+  for (let i=0;i<5;i++) { a.w.document.querySelector('main').innerHTML=markup(); assert.equal((await a.message('status')).total,1); }
+  await wait(); assert.equal(store.writes.length,writes);
+});
+
+test('complete verification replaces obsolete branch membership and gives exact order', async t => {
+  const store=storage(); const a=await page(t,store,'/c/first',markup('old'));
+  a.w.document.querySelector('main').innerHTML=markup('5')+markup('6');
+  a.w.ChatFoldVerify.run=async()=>({answers:['1','2','3','4','5','6'],users:['1','2','3','4','5','6'],complete:true});
+  await a.message('verify'); await wait();
+  let status=await a.message('status'); assert.equal(status.total,6); assert.equal(status.index.complete,true);
+  assert.equal(a.answerButton().querySelector('.number').textContent,'05');
+  await store.local.set({defaultCollapsed:false});
+  assert.equal((await a.message('status')).collapsed,6);
+  a.w.document.querySelector('main').innerHTML=markup('branch-a')+markup('branch-b');
+  a.w.ChatFoldVerify.run=async()=>({answers:['branch-a','branch-b'],users:['branch-a','branch-b'],complete:true});
+  await a.message('verify'); await wait();
+  status=await a.message('status'); assert.equal(status.total,2); assert.equal(status.users.total,2); assert.equal(status.index.complete,true);
+  await wait(); a.close(); const b=await page(t,store,'/c/first',markup('branch-b'));
+  assert.equal((await b.message('status')).total,2);
+});
+
+test('newly seen IDs invalidate verified completeness without incrementing on remount', async t => {
+  const store=storage();const a=await page(t,store);
+  a.w.ChatFoldVerify.run=async()=>({answers:['shared'],users:['shared'],complete:true});
+  await a.message('verify');await wait();assert.equal((await a.message('status')).index.complete,true);
+  a.w.document.querySelector('main').insertAdjacentHTML('beforeend',markup('new'));
+  let s=await a.message('status');assert.equal(s.total,2);assert.equal(s.index.complete,false);
+  a.w.document.querySelector('main').innerHTML=markup('new');s=await a.message('status');assert.equal(s.total,2);
+});
+
+test('cancelled verification keeps existing directory and never certifies a partial scan', async t => {
+  const store=storage();const a=await page(t,store);
+  a.w.ChatFoldVerify.run=async(_adapter,signal)=>{while(!signal.aborted)await wait(5);return {answers:[],users:[],complete:false};};
+  await a.message('verify');assert.equal((await a.message('status')).index.verifying,true);
+  assert.equal((await a.message('set-all',{collapsed:false})).ok,false);
+  await a.message('cancel-verify');await wait();
+  const s=await a.message('status');assert.equal(s.total,1);assert.equal(s.index.complete,false);assert.equal(s.index.verifying,false);
+});
+
+test('missing scroller cannot certify a complete directory', async t => {
+  const store=storage();const a=await page(t,store);
+  await a.message('verify');await wait();const s=await a.message('status');assert.equal(s.index.complete,false);assert.equal(s.total,1);
+});
+
+
+test('unnamed chat counts still reflect in-memory choices without persistent writes', async t => {
+  const store=storage();const a=await page(t,store,'/');
+  a.answerButton().click();a.userButton().click();
+  const s=await a.message('status');assert.equal(s.collapsed,0);assert.equal(s.users.collapsed,1);
+  await wait();assert.equal(store.writes.length,0);
+});
+
+test('expired verified snapshots are shown as cache and legacy records migrate without completeness claims', async t => {
+  const snapshot='chatfolder:catalog:v1:'+JSON.stringify(['chatgpt','first']);
+  const store=storage({[snapshot]:{answers:['a','b','shared'],users:['shared'],at:Date.now()-300001},[stateKey('answer','legacy')]:false});
+  const a=await page(t,store);const s=await a.message('status');
+  assert.equal(s.total,3);assert.equal(s.index.complete,false);assert.ok(s.index.verifiedAt);
+  const b=await page(t,storage({[stateKey('answer','legacy')]:false}));const old=await b.message('status');
+  assert.equal(old.total,2);assert.equal(old.collapsed,1);assert.equal(old.index.complete,false);
 });

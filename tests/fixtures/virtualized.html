@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ChatFolder virtualized six-turn fixture</title>
+<style>body{margin:24px;font:16px/24px sans-serif;color:#222;background:white}.thread-scroll-container{height:320px;width:680px;max-width:100%;overflow:auto;border:1px solid #ddd;overflow-anchor:none}[data-user-message-bubble]{margin-left:auto;width:80%;white-space:pre-wrap;padding:10px 16px;background:#eee;border-radius:16px}article{margin-top:20px}.slot{position:absolute;left:16px;right:16px;height:400px;box-sizing:border-box}</style></head>
+<body><h1>Virtualized conversation: six turns, two mounted</h1><div class="thread-scroll-container"><div id="items" style="height:2400px;position:relative"></div></div>
+<script>
+const scroller=document.querySelector('.thread-scroll-container'),items=document.getElementById('items');let start=-1;
+function render(){const next=Math.min(4,Math.floor(scroller.scrollTop/400));if(next===start)return;start=next;items.replaceChildren();for(let n=start+1;n<=Math.min(6,start+2);n++){const slot=document.createElement('div');slot.className='slot';slot.style.top=((n-1)*400)+'px';const user=document.createElement('div');user.setAttribute('data-turn-key','user-'+n);const bubble=document.createElement('div');bubble.setAttribute('data-user-message-bubble','');bubble.textContent='Synthetic user '+n+'\nSecond line\nThird line';user.append(bubble);const article=document.createElement('article'),answer=document.createElement('div');answer.setAttribute('data-message-author-role','assistant');answer.setAttribute('data-message-id','answer-'+n);answer.textContent='Synthetic answer '+n;article.append(answer);slot.append(user,article);items.append(slot)}}
+scroller.addEventListener('scroll',render);render();
+</script></body></html>

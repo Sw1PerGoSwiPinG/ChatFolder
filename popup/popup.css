@@ -26,7 +26,9 @@ input:checked + .switch::after { transform: translateX(14px); }
 input:focus-visible + .switch { outline: 2px solid var(--accent); outline-offset: 3px; }
 input:disabled + .switch { opacity: .5; }
 .conversation { border-top: 1px solid var(--border); padding: 4px 0 16px; }
-#status { margin: 0 0 12px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.index-status { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+#verify { flex-shrink: 0; padding: 3px 6px; font-size: 10px; color: var(--muted); background: transparent; border: 0; }
+#status { flex: 1; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
 .actions { display: flex; gap: 8px; }
 button { border: 1px solid var(--border); border-radius: 6px; padding: 9px 10px; font: inherit; font-size: 12px; font-weight: 550; color: var(--text); background: var(--background); cursor: pointer; transition: background .15s; }
 .actions button { flex: 1; }
